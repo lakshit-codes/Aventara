@@ -1,0 +1,2332 @@
+"use client";
+import { useState, useMemo, useRef, createContext, useContext, useEffect } from "react";
+
+// ══════════════════════════════════════════════════════════════════
+//   AVENTARA ELITE — Admin Panel v6                                 
+//   Master Activities · Master Hotels · Two-Way Sync               
+//   Summarised View · SaaS-level Architecture                      
+// ══════════════════════════════════════════════════════════════════
+
+const StoreContext = createContext(null);
+const useStore = () => useContext(StoreContext);
+
+// ─── UTILS ───────────────────────────────────────────────────────
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const cls = (...a) => a.filter(Boolean).join(" ");
+const fmt12 = (t) => { if (!t) return "—"; const [h, m] = t.split(":").map(Number); return `${(h % 12) || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; };
+const getCurrSym = (code) => ({ INR: "₹", USD: "$", EUR: "€", GBP: "£", AED: "د.إ" }[code] || code);
+const parseDays = (dur) => { const m = dur?.match(/^(\d+)\s*Day/i); return m ? parseInt(m[1]) : 0; };
+
+// ─── CONSTANTS ────────────────────────────────────────────────────
+const DURATION_OPTIONS = [
+  "2 Days / 1 Night", "3 Days / 2 Nights", "4 Days / 3 Nights",
+  "5 Days / 4 Nights", "6 Days / 5 Nights", "7 Days / 6 Nights",
+  "8 Days / 7 Nights", "10 Days / 9 Nights", "12 Days / 11 Nights",
+  "14 Days / 13 Nights", "15 Days / 14 Nights",
+];
+const OPTIONS = {
+  activityType: ["meal", "sightseeing", "adventure", "transfer", "leisure", "wellness", "shopping"],
+  dayType: ["arrival", "sightseeing", "transfer", "leisure", "departure"],
+  starRating: ["1", "2", "3", "4", "5"],
+  roomType: ["Deluxe Room", "Superior Room", "Suite", "Junior Suite", "Sea View Room", "Pool Villa", "Cottage", "Penthouse"],
+  vehicleType: ["Sedan", "SUV", "Tempo Traveller", "Luxury Coach", "Speedboat", "Ferry", "Train", "Tuk-Tuk", "Helicopter"],
+  transferType: ["Private", "Shared"],
+  mealsOptions: ["Breakfast", "Lunch", "Dinner"],
+  travelStyle: ["Luxury", "Premium", "Budget", "Adventure", "Cultural Immersion", "Family", "Group Tour"],
+  exclusivity: ["Standard", "Premium", "Exclusive", "Ultra-Luxury"],
+  tourType: ["Relaxation", "Heritage", "Adventure Sports", "Wildlife", "Religious", "Culinary", "Beach", "Honeymoon", "Family"],
+  amenities: ["Swimming Pool", "Spa & Wellness", "Fitness Center", "Restaurant", "Bar/Lounge", "Business Center",
+    "Airport Shuttle", "Concierge", "Valet Parking", "Kids Club", "Room Service", "Butler Service",
+    "Private Beach", "Rooftop", "Laundry"],
+};
+
+const CURRENCIES = [
+  { code: "INR", symbol: "₹", label: "INR — Indian Rupee" },
+  { code: "USD", symbol: "$", label: "USD — US Dollar" },
+  { code: "EUR", symbol: "€", label: "EUR — Euro" },
+  { code: "GBP", symbol: "£", label: "GBP — British Pound" },
+  { code: "AED", symbol: "د.إ", label: "AED — UAE Dirham" },
+  { code: "SGD", symbol: "S$", label: "SGD — Singapore Dollar" },
+  { code: "AUD", symbol: "A$", label: "AUD — Australian Dollar" },
+  { code: "THB", symbol: "฿", label: "THB — Thai Baht" },
+];
+
+// ─── STYLE MAPS ───────────────────────────────────────────────────
+const DAY_GRAD = {
+  arrival: "from-emerald-900 to-emerald-800", sightseeing: "from-blue-950 to-blue-900",
+  transfer: "from-orange-900 to-orange-800", leisure: "from-violet-900 to-violet-800",
+  departure: "from-slate-800 to-slate-700",
+};
+const DAY_BADGE = {
+  arrival: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  sightseeing: "bg-sky-100 text-sky-800 border-sky-200",
+  transfer: "bg-orange-100 text-orange-800 border-orange-200",
+  leisure: "bg-violet-100 text-violet-800 border-violet-200",
+  departure: "bg-slate-100 text-slate-700 border-slate-200",
+};
+const ACT_DOT = {
+  meal: "bg-amber-500", sightseeing: "bg-blue-600", adventure: "bg-emerald-600",
+  transfer: "bg-orange-500", leisure: "bg-violet-500", wellness: "bg-pink-500", shopping: "bg-rose-500",
+};
+const ACT_BADGE = {
+  meal: "bg-amber-50 text-amber-800", sightseeing: "bg-blue-50 text-blue-800",
+  adventure: "bg-emerald-50 text-emerald-800", transfer: "bg-orange-50 text-orange-800",
+  leisure: "bg-violet-50 text-violet-800", wellness: "bg-pink-50 text-pink-800", shopping: "bg-rose-50 text-rose-800",
+};
+
+// ─── FACTORIES ────────────────────────────────────────────────────
+const emptyMasterActivity = () => ({ _id: uid(), title: "", description: "", activityType: "sightseeing", defaultDuration: "1 hr", location: "", tags: [], images: [] });
+const emptyMasterHotel = () => ({ _id: uid(), hotelName: "", city: "", starRating: "5", description: "", roomTypes: [], amenities: [], images: [] });
+const emptyDayActivity = () => ({ id: uid(), activityRef: null, time: "09:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: false, ticketIncluded: false, coverTitle: "" });
+const emptyDayHotel = () => ({ id: uid(), hotelRef: null, customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: false, lunch: false, dinner: false } });
+const emptyTransfer = () => ({ id: uid(), transferType: "Private", vehicleType: "Sedan", from: "", to: "", pickupTime: "08:00", dropTime: "10:00", notes: "" });
+const emptyFaq = () => ({ id: uid(), question: "", answer: "" });
+const emptyKBYG = () => ({ id: uid(), point: "" });
+const emptyAdditionalInfo = () => ({ aboutDestination: "", quickInfo: { destinationsCovered: "", duration: "", startPoint: "", endPoint: "" }, experiencesCovered: [], notToMiss: [] });
+const makeDay = (n) => ({ id: uid(), dayNumber: n, title: n === 1 ? "Arrival Day" : `Day ${n}`, city: "", dayType: n === 1 ? "arrival" : "sightseeing", mealsIncluded: [], notes: "", description: "", hotelStays: [], transfers: [], activities: [] });
+
+// ─── RESOLVE HELPERS (two-way sync merge) ─────────────────────────
+const resolveActivity = (dayAct, masters) => {
+  const m = masters.find(x => x._id === dayAct.activityRef);
+  return {
+    ...m, ...dayAct,
+    title: dayAct.customTitle || m?.title || "Untitled Activity",
+    description: dayAct.customDescription || m?.description || "",
+    images: dayAct.customImages?.length ? dayAct.customImages : (m?.images || []),
+    activityType: m?.activityType || "sightseeing",
+    duration: m?.defaultDuration || "—",
+    isLinked: !!m, masterTitle: m?.title,
+  };
+};
+const resolveHotel = (dayHotel, masters) => {
+  const m = masters.find(x => x._id === dayHotel.hotelRef);
+  return {
+    ...m, ...dayHotel,
+    hotelName: m?.hotelName || "Unknown Hotel",
+    city: m?.city || "",
+    starRating: m?.starRating || "5",
+    images: dayHotel.customImages?.length ? dayHotel.customImages : (m?.images || []),
+    roomType: dayHotel.customRoomType || m?.roomTypes?.[0] || "",
+    notes: dayHotel.customNotes || "",
+    isLinked: !!m, masterName: m?.hotelName,
+  };
+};
+
+// ─── MOCK DATA ────────────────────────────────────────────────────
+const INIT_ACTIVITIES = [
+  { _id: "ma-001", title: "Amber Fort Guided Tour", description: "Explore the magnificent Amber Fort with a certified local guide. Includes elephant ride option.", activityType: "sightseeing", defaultDuration: "3 hrs", location: "Jaipur, Rajasthan", tags: ["Heritage", "UNESCO", "Fort"], images: [] },
+  { _id: "ma-002", title: "Sunrise Yoga on Beach", description: "Rejuvenating beachfront yoga session with a certified instructor. All mats and props provided.", activityType: "wellness", defaultDuration: "1 hr", location: "Seminyak, Bali", tags: ["Wellness", "Beach", "Morning"], images: [] },
+  { _id: "ma-003", title: "Kelingking Beach Viewpoint", description: "Iconic T-Rex cliff viewpoint visit with optional snorkeling. Breathtaking Pacific views.", activityType: "adventure", defaultDuration: "2 hrs", location: "Nusa Penida, Bali", tags: ["Beach", "Scenic", "Adventure"], images: [] },
+  { _id: "ma-004", title: "Traditional Cooking Class", description: "Learn authentic local recipes from a master chef. Includes market visit and 3-course meal.", activityType: "meal", defaultDuration: "4 hrs", location: "Ubud, Bali", tags: ["Culinary", "Cultural", "Hands-on"], images: [] },
+  { _id: "ma-005", title: "Desert Camel Safari", description: "Sunset camel safari across the Sam Sand Dunes with cultural camp dinner and folk performance.", activityType: "adventure", defaultDuration: "3 hrs", location: "Jaisalmer, Rajasthan", tags: ["Desert", "Safari", "Sunset"], images: [] },
+];
+const INIT_HOTELS = [
+  { _id: "mh-001", hotelName: "The Layar Private Villas", city: "Seminyak, Bali", starRating: "5", description: "Iconic private pool villas with butler service and tropical gardens.", roomTypes: ["Private Pool Villa", "Garden Villa", "Royal Villa"], amenities: ["Swimming Pool", "Spa & Wellness", "Restaurant", "Butler Service", "Room Service"], images: [] },
+  { _id: "mh-002", hotelName: "Rambagh Palace", city: "Jaipur, Rajasthan", starRating: "5", description: "Former residence of the Maharaja of Jaipur — legendary Taj property.", roomTypes: ["Deluxe Room", "Suite", "Signature Suite", "Royal Suite"], amenities: ["Swimming Pool", "Spa & Wellness", "Restaurant", "Bar/Lounge", "Butler Service", "Fitness Center"], images: [] },
+  { _id: "mh-003", hotelName: "COMO Uma Ubud", city: "Ubud, Bali", starRating: "5", description: "Stunning hillside retreat above the Tjujungan River renowned for wellness.", roomTypes: ["Uma Suite", "Pool Villa", "Garden Terrace Suite"], amenities: ["Swimming Pool", "Spa & Wellness", "Restaurant", "Fitness Center", "Concierge"], images: [] },
+];
+const INIT_PACKAGES = [
+  {
+    id: "pkg-001", title: "Bali Royal Escape", destination: "Bali, Indonesia",
+    tripDuration: "5 Days / 4 Nights", travelStyle: "Luxury", tourType: "Relaxation",
+    exclusivityLevel: "Premium", price: { currency: "USD", amount: 2499 },
+    shortDescription: "An immersive Bali escape blending ancient temples, rice terraces, and pristine beaches.",
+    availability: { availableMonths: ["October", "November", "December"], fixedDepartureDates: [], blackoutDates: [] },
+    inclusions: ["4 nights luxury accommodation", "Daily breakfast", "Airport transfers", "Private villa pool access", "Certified local guide for all excursions"],
+    exclusions: ["International airfare", "Travel insurance", "Personal expenses", "Visa charges"],
+    knowBeforeYouGo: [
+      { id: "kbyg-1", point: "We are not liable for change in itinerary due to any reason like a change in flight schedule, political disturbances, or natural phenomena." },
+      { id: "kbyg-2", point: "Prices are subject to change as per availability of hotel rooms, especially during peak season." },
+      { id: "kbyg-3", point: "Personal expenses and mandatory hotel taxes (if any) will have to be paid by you at the destination." },
+      { id: "kbyg-4", point: "ID proof is mandatory for each individual guest at the time of booking and also upon arrival." },
+    ],
+    additionalInfo: {
+      aboutDestination: "Known as the 'Island of the Gods', Bali is renowned for its forested volcanic mountains, iconic rice paddies, beaches, and coral reefs. The island is home to religious sites such as cliffside Uluwatu Temple. To the south, the beachside town of Kuta is known for surfing, nightlife and shops.",
+      quickInfo: { destinationsCovered: "Seminyak, Ubud, Nusa Penida", duration: "5 Days, 4 Nights", startPoint: "Ngurah Rai International Airport (DPS)", endPoint: "Ngurah Rai International Airport (DPS)" },
+      experiencesCovered: ["Sunrise yoga on the beach at Seminyak", "Kelingking Beach T-Rex viewpoint on Nusa Penida", "Authentic Balinese cooking class in Ubud", "Speedboat island hopping"],
+      notToMiss: ["Witness the Kecak fire dance at Uluwatu Temple", "Explore the Sacred Monkey Forest Sanctuary", "Visit Tegalalang Rice Terraces at sunrise"],
+    },
+    faqs: [
+      { id: "faq-1", question: "Are international flights included?", answer: "No, international airfare is not included. The package covers all local transfers, accommodation, and listed activities. We recommend booking flights to Ngurah Rai International Airport (DPS)." },
+      { id: "faq-2", question: "What is the best time to visit Bali?", answer: "October to March is ideal — warm weather, clear skies, and festive energy. Our package runs during these peak months for the best experience." },
+      { id: "faq-3", question: "Is this package suitable for solo travelers?", answer: "Absolutely. You'll have your own private villa room and a dedicated guide throughout. Solo supplements may apply — please enquire at booking." },
+    ],
+    itinerary: [
+      {
+        id: "d1", dayNumber: 1, title: "Arrival & Welcome", city: "Seminyak", dayType: "arrival", mealsIncluded: ["Dinner"], notes: "Private airport transfer included.",
+        hotelStays: [{ id: "dh1", hotelRef: "mh-001", customRoomType: "Private Pool Villa", checkInTime: "15:00", checkOutTime: "11:00", customNotes: "Welcome fruit basket.", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: true } }],
+        transfers: [{ id: "dt1", transferType: "Private", vehicleType: "SUV", from: "Ngurah Rai Airport", to: "Seminyak", pickupTime: "14:00", dropTime: "15:00", notes: "Name board at arrivals." }],
+        activities: [{ id: "da1", activityRef: "ma-002", time: "06:30", customTitle: "", customDescription: "", customImages: [], guideIncluded: true, ticketIncluded: false, coverTitle: "Start your day right" }]
+      },
+      {
+        id: "d2", dayNumber: 2, title: "Temples & Rice Terraces", city: "Ubud", dayType: "sightseeing", mealsIncluded: ["Breakfast", "Lunch"], notes: "Wear modest clothing.",
+        hotelStays: [{ id: "dh2", hotelRef: "mh-003", customRoomType: "Uma Suite", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: true, dinner: false } }],
+        transfers: [{ id: "dt2", transferType: "Private", vehicleType: "Sedan", from: "Seminyak", to: "Ubud", pickupTime: "08:00", dropTime: "09:00", notes: "" }],
+        activities: [
+          { id: "da2", activityRef: "ma-003", time: "09:30", customTitle: "", customDescription: "", customImages: [], guideIncluded: true, ticketIncluded: true, coverTitle: "" },
+          { id: "da3", activityRef: "ma-004", time: "14:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: false, ticketIncluded: false, coverTitle: "" },
+        ]
+      },
+      { id: "d3", dayNumber: 3, title: "Beach Leisure", city: "Seminyak", dayType: "leisure", mealsIncluded: ["Breakfast"], notes: "", hotelStays: [{ id: "dh3", hotelRef: "mh-001", customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: false } }], transfers: [], activities: [] },
+      {
+        id: "d4", dayNumber: 4, title: "Island Adventure", city: "Nusa Penida", dayType: "sightseeing", mealsIncluded: ["Breakfast", "Lunch"], notes: "Speedboat at 7:30 AM.",
+        hotelStays: [{ id: "dh4", hotelRef: "mh-001", customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: false } }],
+        transfers: [{ id: "dt3", transferType: "Private", vehicleType: "Speedboat", from: "Sanur Beach", to: "Nusa Penida", pickupTime: "07:30", dropTime: "08:15", notes: "" }],
+        activities: [{ id: "da4", activityRef: "ma-003", time: "09:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: true, ticketIncluded: true, coverTitle: "Jaw-dropping vistas" }]
+      },
+      {
+        id: "d5", dayNumber: 5, title: "Departure", city: "Denpasar", dayType: "departure", mealsIncluded: ["Breakfast"], notes: "Check-out 11 AM.",
+        hotelStays: [], transfers: [{ id: "dt4", transferType: "Private", vehicleType: "SUV", from: "Seminyak", to: "Airport", pickupTime: "12:30", dropTime: "13:15", notes: "" }], activities: []
+      },
+    ],
+    createdAt: "2025-01-15",
+  },
+];
+
+// ─── BASE UI PRIMITIVES ───────────────────────────────────────────
+const Badge = ({ children, className = "" }) => (
+  <span className={cls("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border", className)}>{children}</span>
+);
+const Inp = ({ className = "", ...p }) => (
+  <input className={cls("w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 placeholder:text-gray-400 transition-all", className)} {...p} />
+);
+const TA = ({ className = "", rows = 3, ...p }) => (
+  <textarea rows={rows} className={cls("w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 placeholder:text-gray-400 transition-all resize-none", className)} {...p} />
+);
+const Sel = ({ options, placeholder, value, onChange, className = "" }) => (
+  <select value={value || ""} onChange={onChange}
+    className={cls("w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 transition-all cursor-pointer", !value ? "text-gray-400" : "text-gray-900", className)}>
+    {placeholder && <option value="" disabled>{placeholder}</option>}
+    {options.map(o => <option key={o} value={o}>{o}</option>)}
+  </select>
+);
+const Card = ({ children, className = "" }) => <div className={cls("bg-white rounded-xl border border-gray-100 shadow-sm", className)}>{children}</div>;
+const FL = ({ children, required, optional }) => (
+  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+    {children}{required && <span className="text-red-500 ml-0.5">*</span>}{optional && <span className="ml-1 text-gray-400 font-normal normal-case">(optional)</span>}
+  </label>
+);
+const Btn = ({ variant = "primary", size = "md", className = "", children, ...p }) => {
+  const sz = { xs: "px-2 py-1 text-xs", sm: "px-3 py-1.5 text-xs", md: "px-4 py-2 text-sm", lg: "px-6 py-2.5 text-sm" };
+  const va = {
+    primary: "bg-blue-950 text-white hover:bg-blue-900 shadow-sm",
+    secondary: "bg-white text-blue-950 border border-blue-950 hover:bg-blue-50",
+    success: "bg-emerald-700 text-white hover:bg-emerald-600 shadow-sm",
+    danger: "bg-red-600 text-white hover:bg-red-500",
+    ghost: "text-gray-500 hover:bg-gray-100 hover:text-gray-700",
+    outline: "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50",
+    soft: "bg-blue-50 text-blue-900 hover:bg-blue-100",
+    dashed: "bg-white text-blue-900 border-2 border-dashed border-blue-300 hover:bg-blue-50",
+    "d-em": "bg-white text-emerald-800 border-2 border-dashed border-emerald-300 hover:bg-emerald-50",
+    "d-am": "bg-white text-amber-800 border-2 border-dashed border-amber-300 hover:bg-amber-50",
+  };
+  return <button className={cls("inline-flex items-center justify-center font-semibold rounded-lg transition-all focus:outline-none disabled:opacity-50 gap-1.5 whitespace-nowrap", sz[size], va[variant], className)} {...p}>{children}</button>;
+};
+const Modal = ({ open, onClose, title, children, wide = false }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className={cls("relative bg-white rounded-2xl shadow-2xl w-full overflow-hidden", wide ? "max-w-3xl" : "max-w-2xl")} style={{ maxHeight: "90vh" }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
+          <h2 className="text-base font-bold text-gray-900">{title}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 text-lg">✕</button>
+        </div>
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(90vh - 65px)" }}>{children}</div>
+      </div>
+    </div>
+  );
+};
+
+// ─── ICONS ────────────────────────────────────────────────────────
+const Ic = {
+  Dashboard: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
+  Package: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" /></svg>,
+  Activity: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
+  Hotel: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>,
+  Plus: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
+  Trash: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+  Edit: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+  Eye: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>,
+  Search: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+  Back: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>,
+  Chevron: ({ open }) => <svg className={cls("w-4 h-4 transition-transform", open && "rotate-180")} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>,
+  Globe: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} /><path strokeLinecap="round" strokeWidth={2} d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" /></svg>,
+  Arrow: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>,
+  MapPin: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+  Clock: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} /><path strokeLinecap="round" strokeWidth={2} d="M12 6v6l4 2" /></svg>,
+  Car: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16H7m9.293-9H6l-3 6h18l-1-4.5H16.29" /></svg>,
+  Star: () => <svg className="w-3.5 h-3.5 fill-amber-400 text-amber-400" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>,
+  Link: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>,
+  Sync: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
+  Info: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" strokeWidth={2} /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16v-4m0-4h.01" /></svg>,
+  Summary: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
+  Check: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>,
+  X: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>,
+  Tag: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>,
+};
+
+// ─── IMAGE UPLOADER ───────────────────────────────────────────────
+const ImageUploader = ({ images = [], onAdd, onRemove, label = "Images" }) => {
+  const ref = useRef(null);
+  const handleFiles = (e) => { Array.from(e.target.files || []).forEach(f => onAdd(URL.createObjectURL(f))); e.target.value = ""; };
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <FL>{label}</FL>
+        <Btn variant="outline" size="xs" onClick={() => ref.current?.click()}>+ Add</Btn>
+        <input ref={ref} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
+      </div>
+      {images.length === 0
+        ? <div onClick={() => ref.current?.click()} className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"><p className="text-xs text-gray-400">Click to upload images</p></div>
+        : <div className="grid grid-cols-4 gap-2">
+          {images.map((url, i) => (
+            <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+              <img src={url} alt="" className="w-full h-full object-cover" />
+              <button onClick={() => onRemove(i)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white"><Ic.X /></div>
+              </button>
+            </div>
+          ))}
+          <div onClick={() => ref.current?.click()} className="aspect-square border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center cursor-pointer hover:border-blue-300 transition-all text-gray-400"><Ic.Plus /></div>
+        </div>
+      }
+    </div>
+  );
+};
+
+// ─── MASTER ACTIVITY FORM ─────────────────────────────────────────
+const MasterActivityForm = ({ initial, onSave, onClose }) => {
+  const [form, setForm] = useState(initial || emptyMasterActivity());
+  const [tagIn, setTagIn] = useState("");
+  const upd = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  return (
+    <div className="p-6 space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2"><FL required>Activity Title</FL><Inp placeholder="e.g. Amber Fort Guided Tour" value={form.title} onChange={e => upd("title", e.target.value)} /></div>
+        <div><FL>Activity Type</FL><Sel options={OPTIONS.activityType} value={form.activityType} onChange={e => upd("activityType", e.target.value)} /></div>
+        <div><FL>Default Duration</FL><Inp placeholder="e.g. 2 hrs" value={form.defaultDuration} onChange={e => upd("defaultDuration", e.target.value)} /></div>
+        <div className="col-span-2"><FL>Location</FL><Inp placeholder="e.g. Jaipur, Rajasthan" value={form.location} onChange={e => upd("location", e.target.value)} /></div>
+        <div className="col-span-2"><FL>Description</FL><TA placeholder="Full description…" value={form.description} onChange={e => upd("description", e.target.value)} rows={3} /></div>
+      </div>
+      <div>
+        <FL optional>Tags</FL>
+        <div className="flex gap-2 mb-2">
+          <Inp placeholder="e.g. Heritage" value={tagIn} onChange={e => setTagIn(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && tagIn.trim()) { e.preventDefault(); upd("tags", [...form.tags, tagIn.trim()]); setTagIn(""); } }} />
+          <Btn variant="outline" size="sm" onClick={() => { if (tagIn.trim()) { upd("tags", [...form.tags, tagIn.trim()]); setTagIn(""); } }}>Add</Btn>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {form.tags.map((tag, i) => (
+            <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-800 rounded-lg text-xs font-medium border border-blue-200">
+              <Ic.Tag />{tag}<button onClick={() => upd("tags", form.tags.filter((_, j) => j !== i))} className="text-blue-400 hover:text-red-500 ml-0.5"><Ic.X /></button>
+            </span>
+          ))}
+        </div>
+      </div>
+      <ImageUploader images={form.images} onAdd={url => upd("images", [...form.images, url])} onRemove={i => upd("images", form.images.filter((_, j) => j !== i))} />
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+        <Btn variant="success" onClick={() => { if (form.title.trim()) onSave(form); }}>Save Activity</Btn>
+      </div>
+    </div>
+  );
+};
+
+// ─── MASTER HOTEL FORM ────────────────────────────────────────────
+const MasterHotelForm = ({ initial, onSave, onClose }) => {
+  const [form, setForm] = useState(initial || emptyMasterHotel());
+  const upd = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  return (
+    <div className="p-6 space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="col-span-2"><FL required>Hotel Name</FL><Inp placeholder="e.g. The Taj Lake Palace" value={form.hotelName} onChange={e => upd("hotelName", e.target.value)} /></div>
+        <div><FL>City</FL><Inp placeholder="e.g. Udaipur, Rajasthan" value={form.city} onChange={e => upd("city", e.target.value)} /></div>
+        <div>
+          <FL>Star Rating</FL>
+          <div className="flex gap-2">
+            {OPTIONS.starRating.map(s => (
+              <button key={s} type="button" onClick={() => upd("starRating", s)} className={cls("flex-1 py-2 text-sm font-bold rounded-lg border transition-all", form.starRating === s ? "bg-amber-400 text-white border-amber-400" : "bg-white text-gray-500 border-gray-200 hover:border-amber-300")}>{s}★</button>
+            ))}
+          </div>
+        </div>
+        <div className="col-span-2"><FL>Description</FL><TA placeholder="What makes this hotel special…" value={form.description} onChange={e => upd("description", e.target.value)} rows={2} /></div>
+      </div>
+      <div>
+        <FL>Room Types</FL>
+        <Sel options={OPTIONS.roomType.filter(r => !form.roomTypes.includes(r))} placeholder="Select room type to add" value="" onChange={e => { if (e.target.value) upd("roomTypes", [...form.roomTypes, e.target.value]); }} />
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {form.roomTypes.map((r, i) => (
+            <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-lg text-xs font-medium border border-emerald-200">
+              {r}<button onClick={() => upd("roomTypes", form.roomTypes.filter((_, j) => j !== i))} className="text-emerald-400 hover:text-red-500"><Ic.X /></button>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div>
+        <FL>Amenities</FL>
+        <div className="grid grid-cols-3 gap-1.5 mt-1">
+          {OPTIONS.amenities.map(a => {
+            const has = form.amenities.includes(a);
+            return (
+              <label key={a} className={cls("flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer transition-all text-xs font-medium", has ? "bg-blue-950 text-white border-blue-950" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300")}>
+                <input type="checkbox" className="sr-only" checked={has} onChange={e => upd("amenities", e.target.checked ? [...form.amenities, a] : form.amenities.filter(x => x !== a))} />
+                {a}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+      <ImageUploader images={form.images} onAdd={url => upd("images", [...form.images, url])} onRemove={i => upd("images", form.images.filter((_, j) => j !== i))} />
+      <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+        <Btn variant="outline" onClick={onClose}>Cancel</Btn>
+        <Btn variant="success" onClick={() => { if (form.hotelName.trim()) onSave(form); }}>Save Hotel</Btn>
+      </div>
+    </div>
+  );
+};
+
+// ─── MASTER ACTIVITIES PAGE ───────────────────────────────────────
+const MasterActivitiesPage = () => {
+  const { masterActivities, setMasterActivities, packages } = useStore();
+  const [modal, setModal] = useState(null);
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("");
+
+  const filtered = masterActivities.filter(a => {
+    const q = search.toLowerCase();
+    return (!q || a.title.toLowerCase().includes(q) || a.location?.toLowerCase().includes(q)) && (!filterType || a.activityType === filterType);
+  });
+
+  const usageCount = useMemo(() => {
+    const map = {}; masterActivities.forEach(a => { map[a._id] = 0; });
+    packages.forEach(pkg => pkg.itinerary.forEach(day => day.activities.forEach(act => { if (act.activityRef && map[act.activityRef] !== undefined) map[act.activityRef]++; })));
+    return map;
+  }, [masterActivities, packages]);
+
+  const handleSave = (data) => {
+    if (modal.mode === "create") setMasterActivities(p => [...p, { ...data, _id: uid() }]);
+    else setMasterActivities(p => p.map(a => a._id === data._id ? data : a));
+    setModal(null);
+  };
+  const handleDelete = (id) => {
+    const count = usageCount[id] || 0;
+    if (window.confirm(count > 0 ? `Used in ${count} package(s). Deleting will unlink those references. Continue?` : "Delete this master activity?"))
+      setMasterActivities(p => p.filter(a => a._id !== id));
+  };
+
+  const typeCls = { meal: "text-amber-700 bg-amber-50 border-amber-200", sightseeing: "text-blue-700 bg-blue-50 border-blue-200", adventure: "text-emerald-700 bg-emerald-50 border-emerald-200", transfer: "text-orange-700 bg-orange-50 border-orange-200", leisure: "text-violet-700 bg-violet-50 border-violet-200", wellness: "text-pink-700 bg-pink-50 border-pink-200", shopping: "text-rose-700 bg-rose-50 border-rose-200" };
+
+  return (
+    <div className="space-y-5">
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+        <div className="text-blue-600 mt-0.5"><Ic.Info /></div>
+        <div>
+          <p className="text-sm font-semibold text-blue-900">Master Activity Catalog — Global Reusable Records</p>
+          <p className="text-xs text-blue-700 mt-0.5">In production: <code className="bg-blue-100 px-1 rounded">MasterActivity</code> MongoDB collection. Packages reference activities via <code className="bg-blue-100 px-1 rounded">activityRef → ObjectId</code>. Editing a master record auto-updates all linked packages via populate().</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-48"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Ic.Search /></div><Inp className="pl-9" placeholder="Search activities…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <Sel className="w-40" options={OPTIONS.activityType} placeholder="All Types" value={filterType} onChange={e => setFilterType(e.target.value)} />
+        {filterType && <Btn variant="ghost" size="sm" onClick={() => setFilterType("")}>Clear</Btn>}
+        <Btn className="ml-auto" onClick={() => setModal({ mode: "create", data: null })}><Ic.Plus />New Activity</Btn>
+      </div>
+      <div className="space-y-3">
+        {filtered.length === 0 && <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl"><p className="text-gray-400 text-sm">No activities found</p></div>}
+        {filtered.map(act => {
+          const usage = usageCount[act._id] || 0;
+          return (
+            <Card key={act._id} className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <div className={cls("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-sm", ACT_BADGE[act.activityType])}><Ic.Activity /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold text-gray-900">{act.title}</h3>
+                      <Badge className={cls("border", typeCls[act.activityType] || "bg-gray-50 text-gray-600 border-gray-200")}>{act.activityType}</Badge>
+                      {usage > 0 && <span className="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold"><Ic.Link />Used in {usage} pkg</span>}
+                    </div>
+                    {act.location && <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Ic.MapPin />{act.location}</p>}
+                    {act.defaultDuration && <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Ic.Clock />{act.defaultDuration}</p>}
+                    {act.description && <p className="text-xs text-gray-500 mt-1.5 leading-relaxed line-clamp-2">{act.description}</p>}
+                    {act.tags?.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{act.tags.map(t => <span key={t} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t}</span>)}</div>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => setModal({ mode: "edit", data: act })} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Ic.Edit /></button>
+                  <button onClick={() => handleDelete(act._id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Ic.Trash /></button>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+      <p className="text-xs text-gray-400 text-center">{masterActivities.length} master activities · {Object.values(usageCount).reduce((a, b) => a + b, 0)} total usages</p>
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.mode === "create" ? "Create Master Activity" : "Edit Master Activity"}>
+        <MasterActivityForm initial={modal?.data} onSave={handleSave} onClose={() => setModal(null)} />
+      </Modal>
+    </div>
+  );
+};
+
+// ─── MASTER HOTELS PAGE ───────────────────────────────────────────
+const MasterHotelsPage = () => {
+  const { masterHotels, setMasterHotels, packages } = useStore();
+  const [modal, setModal] = useState(null);
+  const [search, setSearch] = useState("");
+  const filtered = masterHotels.filter(h => !search || h.hotelName.toLowerCase().includes(search.toLowerCase()) || h.city.toLowerCase().includes(search.toLowerCase()));
+
+  const usageCount = useMemo(() => {
+    const map = {}; masterHotels.forEach(h => { map[h._id] = 0; });
+    packages.forEach(pkg => pkg.itinerary.forEach(day => day.hotelStays.forEach(hs => { if (hs.hotelRef && map[hs.hotelRef] !== undefined) map[hs.hotelRef]++; })));
+    return map;
+  }, [masterHotels, packages]);
+
+  const handleSave = (data) => {
+    if (modal.mode === "create") setMasterHotels(p => [...p, { ...data, _id: uid() }]);
+    else setMasterHotels(p => p.map(h => h._id === data._id ? data : h));
+    setModal(null);
+  };
+  const handleDelete = (id) => {
+    const count = usageCount[id] || 0;
+    if (window.confirm(count > 0 ? `Used in ${count} package(s). Continue?` : "Delete this hotel?"))
+      setMasterHotels(p => p.filter(h => h._id !== id));
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+        <div className="text-emerald-600 mt-0.5"><Ic.Info /></div>
+        <div>
+          <p className="text-sm font-semibold text-emerald-900">Master Hotel Catalog — Global Reusable Records</p>
+          <p className="text-xs text-emerald-700 mt-0.5">In production: <code className="bg-emerald-100 px-1 rounded">MasterHotel</code> MongoDB collection. Packages reference hotels via <code className="bg-emerald-100 px-1 rounded">hotelRef → ObjectId</code>. Edit master → all packages reflect changes instantly via populate().</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Ic.Search /></div><Inp className="pl-9" placeholder="Search hotels, cities…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <Btn onClick={() => setModal({ mode: "create", data: null })}><Ic.Plus />New Hotel</Btn>
+      </div>
+      <div className="space-y-3">
+        {filtered.length === 0 && <div className="py-16 text-center border-2 border-dashed border-gray-200 rounded-xl"><p className="text-gray-400 text-sm">No hotels found</p></div>}
+        {filtered.map(hotel => {
+          const usage = usageCount[hotel._id] || 0;
+          return (
+            <Card key={hotel._id} className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 flex-shrink-0"><Ic.Hotel /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-bold text-gray-900">{hotel.hotelName}</h3>
+                      <div className="flex">{Array.from({ length: Number(hotel.starRating) }).map((_, i) => <Ic.Star key={i} />)}</div>
+                      {usage > 0 && <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold"><Ic.Link />Used in {usage} pkg</span>}
+                    </div>
+                    <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Ic.MapPin />{hotel.city}</p>
+                    {hotel.description && <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{hotel.description}</p>}
+                    <div className="flex flex-wrap gap-1 mt-2">{hotel.roomTypes?.map(r => <span key={r} className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">{r}</span>)}</div>
+                    {hotel.amenities?.length > 0 && <p className="text-xs text-gray-400 mt-1.5">{hotel.amenities.slice(0, 4).join(" · ")}{hotel.amenities.length > 4 ? ` +${hotel.amenities.length - 4} more` : ""}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => setModal({ mode: "edit", data: hotel })} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg"><Ic.Edit /></button>
+                  <button onClick={() => handleDelete(hotel._id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"><Ic.Trash /></button>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.mode === "create" ? "Create Master Hotel" : "Edit Master Hotel"} wide>
+        <MasterHotelForm initial={modal?.data} onSave={handleSave} onClose={() => setModal(null)} />
+      </Modal>
+    </div>
+  );
+};
+
+// ─── ACTIVITY PICKER (two-way sync) ──────────────────────────────
+const ActivityPicker = ({ dayAct, dayId, onUpdate, onRemove }) => {
+  const { masterActivities } = useStore();
+  const [open, setOpen] = useState(true);
+  const resolved = resolveActivity(dayAct, masterActivities);
+  const upd = (f, v) => onUpdate(dayId, dayAct.id, f, v);
+  return (
+    <div className="border border-blue-200 rounded-xl overflow-hidden bg-white">
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border-b border-blue-100">
+        <div className={cls("w-2.5 h-2.5 rounded-full flex-shrink-0", ACT_DOT[resolved.activityType] || "bg-gray-400")} />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-blue-900 truncate">{resolved.title}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-blue-500 font-mono">{fmt12(dayAct.time)}</span>
+            {resolved.isLinked && <span className="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5"><Ic.Sync />Master Linked</span>}
+          </div>
+        </div>
+        <button onClick={() => setOpen(o => !o)} className="p-1 text-blue-500 hover:bg-blue-100 rounded-lg"><Ic.Chevron open={open} /></button>
+        <button onClick={() => onRemove(dayId, dayAct.id)} className="p-1 text-red-400 hover:bg-red-50 rounded-lg"><Ic.Trash /></button>
+      </div>
+      {open && (
+        <div className="p-4 space-y-3">
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <FL className="text-emerald-700">Link to Master Activity</FL>
+            <Sel options={masterActivities.map(a => a.title)} placeholder="— Select from master catalog —"
+              value={resolved.masterTitle || ""}
+              onChange={e => { const m = masterActivities.find(x => x.title === e.target.value); if (m) { upd("activityRef", m._id); upd("customTitle", ""); upd("customDescription", ""); upd("customImages", []); } }} />
+            {resolved.isLinked && (
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-emerald-600 font-medium flex items-center gap-1"><Ic.Check />Linked: {resolved.masterTitle}</p>
+                <button onClick={() => upd("activityRef", null)} className="text-xs text-red-500 hover:underline">Unlink</button>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><FL>Activity Time</FL><Inp type="time" value={dayAct.time} onChange={e => upd("time", e.target.value)} /></div>
+            <div><FL optional>Cover Title</FL><Inp placeholder="Gallery section heading" value={dayAct.coverTitle || ""} onChange={e => upd("coverTitle", e.target.value)} /></div>
+          </div>
+          {resolved.isLinked && (
+            <div className="space-y-3 pt-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg flex items-center gap-2"><Ic.Info />Override fields below replace master data for this package only</p>
+              <div><FL optional>Custom Title (Override)</FL><Inp placeholder={`Default: "${resolved.masterTitle}"`} value={dayAct.customTitle || ""} onChange={e => upd("customTitle", e.target.value)} /></div>
+              <div><FL optional>Custom Description (Override)</FL><TA placeholder="Default from master" value={dayAct.customDescription || ""} onChange={e => upd("customDescription", e.target.value)} rows={2} /></div>
+            </div>
+          )}
+          {!resolved.isLinked && (
+            <div className="space-y-3">
+              <div><FL>Activity Title</FL><Inp placeholder="e.g. Amber Fort Visit" value={dayAct.customTitle || ""} onChange={e => upd("customTitle", e.target.value)} /></div>
+              <div><FL>Description</FL><TA placeholder="Activity description…" value={dayAct.customDescription || ""} onChange={e => upd("customDescription", e.target.value)} rows={2} /></div>
+            </div>
+          )}
+          <div className="flex items-center gap-6 pt-1 border-t border-gray-100">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 font-medium"><input type="checkbox" className="w-3.5 h-3.5 rounded accent-blue-900" checked={dayAct.guideIncluded} onChange={e => upd("guideIncluded", e.target.checked)} />Guide Included</label>
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 font-medium"><input type="checkbox" className="w-3.5 h-3.5 rounded accent-blue-900" checked={dayAct.ticketIncluded} onChange={e => upd("ticketIncluded", e.target.checked)} />Ticket Included</label>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── HOTEL PICKER (two-way sync) ──────────────────────────────────
+const HotelPicker = ({ dayHotel, dayId, onUpdate, onRemove }) => {
+  const { masterHotels } = useStore();
+  const [open, setOpen] = useState(true);
+  const resolved = resolveHotel(dayHotel, masterHotels);
+  const upd = (f, v) => onUpdate(dayId, dayHotel.id, f, v);
+  const masterRoomTypes = masterHotels.find(m => m._id === dayHotel.hotelRef)?.roomTypes || OPTIONS.roomType;
+  return (
+    <div className="border border-emerald-200 rounded-xl overflow-hidden bg-white">
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-emerald-50 border-b border-emerald-100">
+        <div className="text-emerald-700"><Ic.Hotel /></div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-emerald-900 truncate">{resolved.hotelName}</p>
+          <div className="flex items-center gap-2">
+            {resolved.city && <span className="text-xs text-emerald-600 flex items-center gap-0.5"><Ic.MapPin />{resolved.city}</span>}
+            {resolved.isLinked && <span className="text-xs bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5"><Ic.Sync />Linked</span>}
+          </div>
+        </div>
+        <button onClick={() => setOpen(o => !o)} className="p-1 text-emerald-600 hover:bg-emerald-100 rounded-lg"><Ic.Chevron open={open} /></button>
+        <button onClick={() => onRemove(dayId, dayHotel.id)} className="p-1 text-red-400 hover:bg-red-50 rounded-lg"><Ic.Trash /></button>
+      </div>
+      {open && (
+        <div className="p-4 space-y-3">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <FL className="text-blue-700">Link to Master Hotel</FL>
+            <Sel options={masterHotels.map(h => h.hotelName)} placeholder="— Select from hotel catalog —"
+              value={resolved.masterName || ""}
+              onChange={(e) => {
+                const selectedHotel = masterHotels.find(
+                  h => h.hotelName === e.target.value
+                );
+
+                if (selectedHotel) {
+                  upd("hotelRef", selectedHotel._id);
+                  upd("customRoomType", "");
+                  upd("customNotes", "");
+                  upd("customImages", []);
+                }
+              }} />
+            {resolved.isLinked && (
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-blue-600 font-medium flex items-center gap-1"><Ic.Check />{resolved.masterName} · {resolved.city}</p>
+                <button onClick={() => upd("hotelRef", null)} className="text-xs text-red-500 hover:underline">Unlink</button>
+              </div>
+            )}
+          </div>
+          <div>
+            <FL>Room Type</FL>
+            <Sel options={masterRoomTypes} placeholder="Select room type" value={dayHotel.customRoomType || ""} onChange={e => upd("customRoomType", e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><FL>Check-in</FL><Inp type="time" value={dayHotel.checkInTime} onChange={e => upd("checkInTime", e.target.value)} /></div>
+            <div><FL>Check-out</FL><Inp type="time" value={dayHotel.checkOutTime} onChange={e => upd("checkOutTime", e.target.value)} /></div>
+          </div>
+
+          {/* Meal Inclusions */}
+          <div>
+            <FL>Meal Inclusions</FL>
+            <div className="grid grid-cols-3 gap-2 mt-1">
+              {[["breakfast", "☕ Breakfast"], ["lunch", "🍽 Lunch"], ["dinner", "🌙 Dinner"]].map(([meal, label]) => {
+                const included = dayHotel.mealInclusions?.[meal] || false;
+                return (
+                  <button key={meal} type="button"
+                    onClick={() => upd("mealInclusions", { ...(dayHotel.mealInclusions || {}), [meal]: !included })}
+                    className={cls("flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all font-medium text-xs",
+                      included ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-gray-200 bg-white text-gray-400 hover:border-gray-300"
+                    )}>
+                    <span className="text-base">{label.split(" ")[0]}</span>
+                    <span className="leading-tight text-center">{label.split(" ").slice(1).join(" ")}</span>
+                    <span className={cls("text-xs font-bold", included ? "text-emerald-600" : "text-gray-400")}>{included ? "Included" : "Not included"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div><FL optional>Notes</FL><TA placeholder="Check-in instructions, special requests…" value={dayHotel.customNotes || ""} onChange={e => upd("customNotes", e.target.value)} rows={2} /></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── SUMMARISED VIEW ──────────────────────────────────────────────
+const SummarisedView = ({ itinerary, pkg }) => {
+  const { masterActivities, masterHotels } = useStore();
+  const [openDays, setOpenDays] = useState(() => new Set([itinerary[0]?.id]));
+  const toggle = (id) => setOpenDays(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const mealCls = { Breakfast: "bg-amber-100 text-amber-800", Lunch: "bg-orange-100 text-orange-800", Dinner: "bg-rose-100 text-rose-800" };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between p-4 bg-blue-950 text-white rounded-xl">
+        <div>
+          <h2 className="text-sm font-bold">{pkg?.title || "Package"} — Summarised Itinerary</h2>
+          <p className="text-xs text-blue-300 mt-0.5">{itinerary.length} days · read-only overview</p>
+        </div>
+        <div className="flex gap-2">
+          <Btn variant="ghost" size="sm" className="text-blue-300 hover:text-white hover:bg-white/10" onClick={() => setOpenDays(new Set(itinerary.map(d => d.id)))}>Expand All</Btn>
+          <Btn variant="ghost" size="sm" className="text-blue-300 hover:text-white hover:bg-white/10" onClick={() => setOpenDays(new Set())}>Collapse All</Btn>
+        </div>
+      </div>
+
+      {itinerary.map(day => {
+        const isOpen = openDays.has(day.id);
+        const rHotels = (day.hotelStays || []).map(h => resolveHotel(h, masterHotels));
+        const rActs = (day.activities || []).map(a => ({ ...resolveActivity(a, masterActivities), time: a.time })).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+        const hasItems = rHotels.length + (day.transfers?.length || 0) + rActs.length > 0;
+        return (
+          <div key={day.id} className="rounded-xl overflow-hidden border border-gray-200">
+            <button type="button" onClick={() => toggle(day.id)}
+              className={cls("w-full flex items-center gap-4 px-5 py-3.5 text-left bg-gradient-to-r text-white", DAY_GRAD[day.dayType] || "from-blue-950 to-blue-900")}>
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm font-bold flex-shrink-0">{day.dayNumber}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm">{day.title}</span>
+                  {day.city && <span className="text-xs opacity-60 flex items-center gap-1"><Ic.MapPin />{day.city}</span>}
+                </div>
+                <div className="flex items-center gap-4 mt-0.5 text-xs opacity-70">
+                  {(day.transfers?.length > 0) && <span className="flex items-center gap-1"><Ic.Car />{day.transfers.length} transfer{day.transfers.length > 1 ? "s" : ""}</span>}
+                  {rActs.length > 0 && <span className="flex items-center gap-1"><Ic.Activity />{rActs.length} activit{rActs.length > 1 ? "ies" : "y"}</span>}
+                  {rHotels.length > 0 && <span className="flex items-center gap-1"><Ic.Hotel />{rHotels.length} hotel{rHotels.length > 1 ? "s" : ""}</span>}
+                  {(day.mealsIncluded?.length > 0) && <span>🍽 {day.mealsIncluded.join(" + ")}</span>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={cls("text-xs px-2.5 py-0.5 rounded-full border font-semibold", DAY_BADGE[day.dayType])}>{day.dayType}</span>
+                <Ic.Chevron open={isOpen} />
+              </div>
+            </button>
+
+            {isOpen && (
+              <div className="bg-white divide-y divide-gray-50">
+                {day.notes && <div className="px-5 py-2.5 bg-amber-50 border-b border-amber-100 flex items-start gap-2"><div className="text-amber-500 mt-0.5 flex-shrink-0"><Ic.Info /></div><p className="text-xs text-amber-800">{day.notes}</p></div>}
+
+                {/* Day Description */}
+                {day.description && (
+                  <div className="px-5 py-4 border-b border-gray-50">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Day Overview</p>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{day.description}</p>
+                  </div>
+                )}
+
+                {/* Meals */}
+                {day.mealsIncluded?.length > 0 && (
+                  <div className="px-5 py-3 flex items-center gap-3">
+                    <span className="text-xs font-semibold text-gray-500 w-20 flex-shrink-0">Meals</span>
+                    <div className="flex gap-2">{day.mealsIncluded.map(m => <span key={m} className={cls("text-xs px-2.5 py-1 rounded-full font-semibold", mealCls[m] || "bg-gray-100 text-gray-700")}>{m}</span>)}</div>
+                  </div>
+                )}
+
+                {/* Transfers */}
+                {(day.transfers?.length > 0) && (
+                  <div className="px-5 py-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 rounded-md bg-orange-100 flex items-center justify-center text-orange-600"><Ic.Car /></div>
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Transfers ({day.transfers.length})</span>
+                    </div>
+                    <div className="space-y-2 ml-7">
+                      {day.transfers.map(tr => (
+                        <div key={tr.id} className="flex items-center gap-2 text-xs text-gray-700">
+                          <span className="font-semibold text-gray-400 w-14 flex-shrink-0">{fmt12(tr.pickupTime)}</span>
+                          <span className="font-semibold truncate max-w-[90px]">{tr.from || "—"}</span>
+                          <div className="flex items-center gap-1 text-orange-400 flex-shrink-0"><div className="w-3 h-px bg-orange-200" /><Ic.Arrow /><div className="w-3 h-px bg-orange-200" /></div>
+                          <span className="font-semibold truncate max-w-[90px]">{tr.to || "—"}</span>
+                          <span className={cls("ml-auto text-xs px-2 py-0.5 rounded-full border flex-shrink-0", "bg-orange-50 text-orange-700 border-orange-200")}>{tr.vehicleType}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Activities */}
+                {rActs.length > 0 && (
+                  <div className="px-5 py-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-5 h-5 rounded-md bg-blue-100 flex items-center justify-center text-blue-600"><Ic.Activity /></div>
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Activities ({rActs.length})</span>
+                    </div>
+                    <div className="space-y-4 ml-7">
+                      {rActs.map((act, i) => (
+                        <div key={i} className="flex items-start gap-3">
+                          <span className="text-xs font-mono text-gray-400 w-14 flex-shrink-0 mt-0.5">{fmt12(act.time)}</span>
+                          <div className={cls("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", ACT_DOT[act.activityType] || "bg-gray-400")} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-semibold text-gray-900">{act.title}</span>
+                              <span className={cls("text-xs px-1.5 py-0.5 rounded-full", ACT_BADGE[act.activityType])}>{act.activityType}</span>
+                              {act.duration && <span className="text-xs text-gray-400 flex items-center gap-0.5"><Ic.Clock />{act.duration}</span>}
+                              {act.isLinked && <span className="text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 font-semibold"><Ic.Sync />Master</span>}
+                            </div>
+                            {act.description && <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{act.description.substring(0, 100)}{act.description.length > 100 ? "…" : ""}</p>}
+                            <div className="flex gap-2 mt-0.5">
+                              {act.guideIncluded && <span className="text-xs text-emerald-600 font-medium flex items-center gap-0.5"><Ic.Check />Guide</span>}
+                              {act.ticketIncluded && <span className="text-xs text-blue-600 font-medium flex items-center gap-0.5"><Ic.Check />Ticket</span>}
+                            </div>
+                            {/* Activity Images */}
+                            {act.images?.length > 0 && (
+                              <div className="mt-2">
+                                {act.coverTitle && <p className="text-xs font-semibold text-blue-900 mb-1.5 italic">"{act.coverTitle}"</p>}
+                                <div className="grid grid-cols-4 gap-1.5">
+                                  {act.images.map((url, j) => (
+                                    <div key={j} className="aspect-square rounded-lg overflow-hidden bg-gray-100 shadow-sm">
+                                      <img src={url} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform" />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Hotels */}
+                {rHotels.length > 0 && (
+                  <div className="px-5 py-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center text-emerald-600"><Ic.Hotel /></div>
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Staying At ({rHotels.length})</span>
+                    </div>
+                    <div className="space-y-3 ml-7">
+                      {rHotels.map((h, i) => (
+                        <div key={i} className="rounded-xl border border-emerald-100 bg-emerald-50/30 overflow-hidden">
+                          {/* Hotel image strip */}
+                          {h.images?.length > 0 && (
+                            <div className={cls("grid gap-1", h.images.length === 1 ? "grid-cols-1" : h.images.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
+                              {h.images.slice(0, 3).map((url, j) => (
+                                <div key={j} className={cls("overflow-hidden bg-gray-200", h.images.length === 1 ? "h-40" : "h-28")}>
+                                  <img src={url} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
+                                </div>
+                              ))}
+                              {h.images.length > 3 && (
+                                <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-lg font-semibold">+{h.images.length - 3} more</div>
+                              )}
+                            </div>
+                          )}
+                          {/* Hotel info */}
+                          <div className="p-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-sm font-bold text-gray-900">{h.hotelName}</span>
+                                  {h.starRating && <div className="flex">{Array.from({ length: Number(h.starRating) }).map((_, k) => <svg key={k} className="w-3 h-3 fill-amber-400" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>)}</div>}
+                                  {h.isLinked && <span className="text-xs bg-emerald-100 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full flex items-center gap-0.5 font-semibold"><Ic.Sync />Master</span>}
+                                </div>
+                                {h.city && <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Ic.MapPin />{h.city}</p>}
+                                {h.roomType && <p className="text-xs text-gray-600 font-medium mt-1">🛏 {h.roomType}</p>}
+                                {h.notes && <p className="text-xs text-gray-400 mt-1 italic">{h.notes}</p>}
+                              </div>
+                              <div className="text-right flex-shrink-0 text-xs text-gray-500 space-y-1">
+                                <div className="flex items-center gap-1 justify-end"><span>🔑</span><span className="font-semibold">{fmt12(h.checkInTime)}</span></div>
+                                <div className="flex items-center gap-1 justify-end"><span>🚪</span><span className="font-semibold">{fmt12(h.checkOutTime)}</span></div>
+                              </div>
+                            </div>
+                            {/* Meal inclusions display */}
+                            {h.mealInclusions && (
+                              <div className="mt-3 pt-3 border-t border-emerald-100">
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Inclusions</p>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {[["breakfast", "☕", "Breakfast"], ["lunch", "🍽", "Lunch"], ["dinner", "🌙", "Dinner"]].map(([meal, icon, label]) => {
+                                    const inc = h.mealInclusions[meal];
+                                    return (
+                                      <div key={meal} className={cls("flex flex-col items-center gap-1 py-2.5 rounded-xl border", inc ? "bg-emerald-50 border-emerald-200" : "bg-gray-50 border-gray-200")}>
+                                        <span className="text-base">{icon}</span>
+                                        <span className="text-xs font-semibold text-gray-700">{label}</span>
+                                        <div className={cls("flex items-center gap-1 text-xs font-bold", inc ? "text-emerald-600" : "text-gray-400")}>
+                                          {inc ? <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>Included</> : <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>Not Included</>}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!hasItems && <div className="px-5 py-4 text-center text-xs text-gray-400 italic">No activities, hotels or transfers added yet.</div>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div className="flex flex-wrap gap-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+        <span className="text-xs font-semibold text-gray-500 mr-1">Legend:</span>
+        {[["sightseeing", "Sightseeing"], ["meal", "Meal"], ["adventure", "Adventure"], ["leisure", "Leisure"], ["wellness", "Wellness"]].map(([type, label]) => (
+          <div key={type} className="flex items-center gap-1.5 text-xs text-gray-600"><div className={cls("w-2.5 h-2.5 rounded-full", ACT_DOT[type])} />{label}</div>
+        ))}
+        <div className="flex items-center gap-1 text-xs text-emerald-600 ml-2 font-semibold"><Ic.Sync />=Master linked</div>
+      </div>
+    </div>
+  );
+};
+
+// ─── DAY DESCRIPTION FIELD — stable top-level to avoid focus loss on each keystroke ──
+const DayDescriptionField = ({ dayId, value, onCommit }) => {
+  const [local, setLocal] = useState(value || "");
+  const prevId = useRef(dayId);
+  if (prevId.current !== dayId) { prevId.current = dayId; setLocal(value || ""); }
+  return (
+    <textarea
+      rows={4}
+      placeholder="Describe the full day experience — what travellers will see, do, feel and enjoy. This narrative appears on the package detail page."
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => { if (local !== (value || "")) onCommit(local); }}
+      className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 placeholder:text-gray-400 transition-all resize-none leading-relaxed"
+    />
+  );
+};
+
+// ─── ITINERARY BUILDER ────────────────────────────────────────────
+const ItineraryBuilder = ({ itinerary, setItinerary }) => {
+  const [openDays, setOpenDays] = useState(() => new Set([itinerary[0]?.id]));
+  const toggle = (id) => setOpenDays(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const updateDay = (id, f, v) => setItinerary(p => p.map(d => d.id === id ? { ...d, [f]: v } : d));
+  const addHotel = (did) => setItinerary(p => p.map(d => d.id === did ? { ...d, hotelStays: [...d.hotelStays, emptyDayHotel()] } : d));
+  const removeHotel = (did, hid) => setItinerary(p => p.map(d => d.id === did ? { ...d, hotelStays: d.hotelStays.filter(h => h.id !== hid) } : d));
+  const updateHotel = (did, hid, f, v) => setItinerary(p => p.map(d => d.id === did ? { ...d, hotelStays: d.hotelStays.map(h => h.id === hid ? { ...h, [f]: v } : h) } : d));
+  const addAct = (did) => setItinerary(p => p.map(d => d.id === did ? { ...d, activities: [...d.activities, emptyDayActivity()] } : d));
+  const removeAct = (did, aid) => setItinerary(p => p.map(d => d.id === did ? { ...d, activities: d.activities.filter(a => a.id !== aid) } : d));
+  const updateAct = (did, aid, f, v) => setItinerary(p => p.map(d => d.id === did ? { ...d, activities: d.activities.map(a => a.id === aid ? { ...a, [f]: v } : a) } : d));
+  const addTr = (did) => setItinerary(p => p.map(d => d.id === did ? { ...d, transfers: [...d.transfers, emptyTransfer()] } : d));
+  const removeTr = (did, tid) => setItinerary(p => p.map(d => d.id === did ? { ...d, transfers: d.transfers.filter(t => t.id !== tid) } : d));
+  const updateTr = (did, tid, f, v) => setItinerary(p => p.map(d => d.id === did ? { ...d, transfers: d.transfers.map(t => t.id === tid ? { ...t, [f]: v } : t) } : d));
+
+  if (itinerary.length === 0) return (
+    <div className="py-12 text-center border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/40">
+      <p className="text-sm font-bold text-blue-900">Select trip duration to generate days</p>
+      <p className="text-xs text-gray-400 mt-1">Days auto-generate based on duration selection</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+        <Ic.Sync /><span className="font-bold">{itinerary.length} days</span>
+        <span className="text-blue-500">· Hotels & Activities link to Master Catalog · Two-way sync via activityRef/hotelRef</span>
+      </div>
+      {itinerary.map((day, idx) => {
+        const isOpen = openDays.has(day.id);
+        return (
+          <div key={day.id} className="rounded-xl overflow-hidden shadow-sm border border-gray-200">
+            <button type="button" onClick={() => toggle(day.id)}
+              className={cls("w-full flex items-center gap-3 px-5 py-4 bg-gradient-to-r text-white", DAY_GRAD[day.dayType] || "from-blue-950 to-blue-900")}>
+              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm font-bold">{day.dayNumber}</div>
+              <div className="flex-1 text-left min-w-0">
+                <p className="font-bold text-sm">{day.title || `Day ${day.dayNumber}`}</p>
+                <p className="text-xs opacity-60">{day.city && `${day.city} · `}{day.hotelStays.length} hotel · {day.activities.length} activity · {day.transfers.length} transfer</p>
+              </div>
+              <span className={cls("text-xs px-2.5 py-0.5 rounded-full border font-semibold", DAY_BADGE[day.dayType])}>{day.dayType}</span>
+              <Ic.Chevron open={isOpen} />
+            </button>
+
+            {isOpen && (
+              <div className="bg-white divide-y divide-gray-100">
+                {/* Day Info */}
+                <div className="p-4 grid grid-cols-2 gap-3">
+                  <div><FL>Day Title</FL><Inp value={day.title} onChange={e => updateDay(day.id, "title", e.target.value)} placeholder={`Day ${day.dayNumber}`} /></div>
+                  <div><FL>City</FL><Inp value={day.city} onChange={e => updateDay(day.id, "city", e.target.value)} placeholder="e.g. Jaipur" /></div>
+                  <div><FL>Day Type</FL><Sel options={OPTIONS.dayType} value={day.dayType} onChange={e => updateDay(day.id, "dayType", e.target.value)} /></div>
+                  <div>
+                    <FL>Meals Included</FL>
+                    <div className="flex items-center gap-3 h-9">
+                      {OPTIONS.mealsOptions.map(m => (
+                        <label key={m} className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-600 font-medium">
+                          <input type="checkbox" className="w-3.5 h-3.5 rounded accent-blue-900" checked={day.mealsIncluded.includes(m)} onChange={e => updateDay(day.id, "mealsIncluded", e.target.checked ? [...day.mealsIncluded, m] : day.mealsIncluded.filter(x => x !== m))} />{m}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="col-span-2"><FL optional>Day Notes</FL><Inp value={day.notes || ""} onChange={e => updateDay(day.id, "notes", e.target.value)} placeholder="Special instructions…" /></div>
+                  <div className="col-span-2">
+                    <FL optional>Day Description</FL>
+                    <DayDescriptionField
+                      dayId={day.id}
+                      value={day.description}
+                      onCommit={v => updateDay(day.id, "description", v)}
+                    />
+                    {day.description && (
+                      <p className="text-xs text-gray-400 mt-1 text-right">{day.description.length} chars</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Hotels */}
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-emerald-700 flex items-center justify-center text-white"><Ic.Hotel /></div>
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Hotel Stays</span>
+                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{day.hotelStays.length}</span>
+                    </div>
+                    <Btn variant="d-em" size="sm" onClick={() => addHotel(day.id)}><Ic.Plus />Add Hotel</Btn>
+                  </div>
+                  {day.hotelStays.length === 0 && <p className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-emerald-200 rounded-xl bg-emerald-50/30">Click "Add Hotel" to link from master catalog</p>}
+                  <div className="space-y-2">{day.hotelStays.map(hs => <HotelPicker key={hs.id} dayHotel={hs} dayId={day.id} onUpdate={(did, hid, f, v) => updateHotel(did, hid, f, v)} onRemove={(did, hid) => removeHotel(did, hid)} />)}</div>
+                </div>
+
+                {/* Transfers */}
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-orange-600 flex items-center justify-center text-white"><Ic.Car /></div>
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Transfers</span>
+                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{day.transfers.length}</span>
+                    </div>
+                    <Btn variant="d-am" size="sm" onClick={() => addTr(day.id)}><Ic.Plus />Add Transfer</Btn>
+                  </div>
+                  {day.transfers.length === 0 && <p className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-orange-200 rounded-xl bg-orange-50/30">No transfers added</p>}
+                  <div className="space-y-2">
+                    {day.transfers.map(tr => (
+                      <div key={tr.id} className="p-3 border border-orange-200 rounded-xl bg-orange-50/30 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Sel options={OPTIONS.transferType} value={tr.transferType} onChange={e => updateTr(day.id, tr.id, "transferType", e.target.value)} className="w-28" />
+                          <Sel options={OPTIONS.vehicleType} value={tr.vehicleType} onChange={e => updateTr(day.id, tr.id, "vehicleType", e.target.value)} className="flex-1" />
+                          <button onClick={() => removeTr(day.id, tr.id)} className="p-1 text-red-400 hover:bg-red-50 rounded-lg flex-shrink-0"><Ic.Trash /></button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          <Inp placeholder="From" value={tr.from} onChange={e => updateTr(day.id, tr.id, "from", e.target.value)} />
+                          <Inp placeholder="To" value={tr.to} onChange={e => updateTr(day.id, tr.id, "to", e.target.value)} />
+                          <Inp type="time" value={tr.pickupTime} onChange={e => updateTr(day.id, tr.id, "pickupTime", e.target.value)} />
+                          <Inp type="time" value={tr.dropTime} onChange={e => updateTr(day.id, tr.id, "dropTime", e.target.value)} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Activities */}
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded bg-blue-700 flex items-center justify-center text-white"><Ic.Activity /></div>
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Activities</span>
+                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{day.activities.length}</span>
+                    </div>
+                    <Btn variant="dashed" size="sm" onClick={() => addAct(day.id)}><Ic.Plus />Add Activity</Btn>
+                  </div>
+                  {day.activities.length === 0 && <p className="text-xs text-center text-gray-400 py-4 border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/30">Click "Add Activity" to link from master catalog</p>}
+                  <div className="space-y-2">{day.activities.map(act => <ActivityPicker key={act.id} dayAct={act} dayId={day.id} onUpdate={updateAct} onRemove={removeAct} />)}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ─── EDITABLE LIST ITEM (stable identity, avoids re-mount on each keystroke) ─
+// Used by Inclusions/Exclusions. Key is item index — stable as long as list doesn't reorder.
+const EditableListItem = ({ value, onBlur, onRemove, icon, rowCls, iconCls }) => {
+  const [local, setLocal] = useState(value);
+  // sync if parent pushes a new value (e.g. after delete re-index)
+  const prevRef = useRef(value);
+  if (prevRef.current !== value && document.activeElement?.dataset?.itemid !== String(value)) {
+    prevRef.current = value;
+    setLocal(value);
+  }
+  return (
+    <div className={cls("flex items-center gap-2 px-3 py-2.5 rounded-lg group", rowCls)}>
+      <span className={cls("flex-shrink-0 font-bold text-sm", iconCls)}>{icon}</span>
+      <input
+        type="text"
+        value={local}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={() => { if (local.trim() !== value) onBlur(local.trim() || value); }}
+        className="flex-1 bg-transparent text-sm text-gray-900 font-medium focus:outline-none border-none min-w-0 placeholder:text-gray-400"
+        placeholder="Type here…"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex-shrink-0 p-1 text-gray-400 hover:text-red-500 transition-colors rounded opacity-0 group-hover:opacity-100"
+      ><Ic.Trash /></button>
+    </div>
+  );
+};
+
+// ─── INCLUSIONS & EXCLUSIONS SECTION ─────────────────────────────
+const InclusionsExclusionsSection = ({ inclusions, exclusions, onChangeInc, onChangeExc }) => {
+  const [newInc, setNewInc] = useState("");
+  const [newExc, setNewExc] = useState("");
+  const newIncRef = useRef(null);
+  const newExcRef = useRef(null);
+
+  const addInc = () => {
+    const v = newInc.trim();
+    if (!v) return;
+    onChangeInc([...inclusions, v]);
+    setNewInc("");
+    setTimeout(() => newIncRef.current?.focus(), 0);
+  };
+  const addExc = () => {
+    const v = newExc.trim();
+    if (!v) return;
+    onChangeExc([...exclusions, v]);
+    setNewExc("");
+    setTimeout(() => newExcRef.current?.focus(), 0);
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-7 h-7 rounded-lg bg-blue-950 text-white flex items-center justify-center text-sm font-bold">3</div>
+        <div>
+          <h3 className="font-bold text-gray-900">What's Inside the Package?</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Add inclusions (what's covered) and exclusions (what's not covered)</p>
+        </div>
+      </div>
+
+      {/* TABLE LAYOUT */}
+      <div className="rounded-xl border border-gray-200 overflow-hidden">
+        {/* Header row */}
+        <div className="grid grid-cols-2 divide-x divide-gray-200">
+          <div className="px-5 py-3 bg-emerald-50 border-b border-gray-200 flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">✓</div>
+            <span className="text-sm font-bold text-emerald-800">Inclusions</span>
+            <span className="ml-auto text-xs text-emerald-600 font-semibold">{inclusions.length} item{inclusions.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="px-5 py-3 bg-red-50 border-b border-gray-200 flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">✕</div>
+            <span className="text-sm font-bold text-red-700">Exclusions</span>
+            <span className="ml-auto text-xs text-red-500 font-semibold">{exclusions.length} item{exclusions.length !== 1 ? "s" : ""}</span>
+          </div>
+        </div>
+
+        {/* Rows */}
+        {(inclusions.length > 0 || exclusions.length > 0) && (
+          <div className="divide-y divide-gray-100">
+            {Array.from({ length: Math.max(inclusions.length, exclusions.length) }).map((_, i) => (
+              <div key={i} className="grid grid-cols-2 divide-x divide-gray-100">
+                {/* Inclusion cell */}
+                <div className="px-4 py-1">
+                  {inclusions[i] !== undefined ? (
+                    <EditableListItem
+                      value={inclusions[i]}
+                      onBlur={v => onChangeInc(inclusions.map((x, j) => j === i ? v : x))}
+                      onRemove={() => onChangeInc(inclusions.filter((_, j) => j !== i))}
+                      icon="✓"
+                      rowCls="bg-white"
+                      iconCls="text-emerald-500"
+                    />
+                  ) : <div className="h-10" />}
+                </div>
+                {/* Exclusion cell */}
+                <div className="px-4 py-1">
+                  {exclusions[i] !== undefined ? (
+                    <EditableListItem
+                      value={exclusions[i]}
+                      onBlur={v => onChangeExc(exclusions.map((x, j) => j === i ? v : x))}
+                      onRemove={() => onChangeExc(exclusions.filter((_, j) => j !== i))}
+                      icon="✕"
+                      rowCls="bg-white"
+                      iconCls="text-red-400"
+                    />
+                  ) : <div className="h-10" />}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state row */}
+        {inclusions.length === 0 && exclusions.length === 0 && (
+          <div className="grid grid-cols-2 divide-x divide-gray-100">
+            <div className="px-5 py-6 text-center text-xs text-gray-400 italic">No inclusions yet</div>
+            <div className="px-5 py-6 text-center text-xs text-gray-400 italic">No exclusions yet</div>
+          </div>
+        )}
+
+        {/* Add row */}
+        <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gray-50/60">
+          <div className="px-4 py-3 flex gap-2">
+            <input
+              ref={newIncRef}
+              type="text"
+              placeholder="+ Type inclusion and press Enter…"
+              value={newInc}
+              onChange={e => setNewInc(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addInc(); } }}
+              className="flex-1 px-3 py-1.5 text-sm text-gray-900 border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400/30 bg-white placeholder:text-gray-400 min-w-0"
+            />
+            <button type="button" onClick={addInc} className="px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors flex-shrink-0 flex items-center gap-1"><Ic.Plus />Add</button>
+          </div>
+          <div className="px-4 py-3 flex gap-2">
+            <input
+              ref={newExcRef}
+              type="text"
+              placeholder="+ Type exclusion and press Enter…"
+              value={newExc}
+              onChange={e => setNewExc(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExc(); } }}
+              className="flex-1 px-3 py-1.5 text-sm text-gray-900 border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300/30 bg-white placeholder:text-gray-400 min-w-0"
+            />
+            <button type="button" onClick={addExc} className="px-3 py-1.5 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-400 transition-colors flex-shrink-0 flex items-center gap-1"><Ic.Plus />Add</button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+// ─── KNOW BEFORE YOU GO SECTION ──────────────────────────────────
+// Uses internal state per item via a stable sub-component to avoid re-mount on each keystroke
+const KBYGItem = ({ item, index, onBlur, onRemove }) => {
+  const [local, setLocal] = useState(item.point);
+  const prevRef = useRef(item.point);
+  if (prevRef.current !== item.point) { prevRef.current = item.point; setLocal(item.point); }
+  return (
+    <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl group">
+      <div className="w-5 h-5 rounded-full bg-amber-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">{index + 1}</div>
+      <textarea
+        value={local}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={() => { if (local.trim() !== item.point) onBlur(local.trim() || item.point); }}
+        rows={2}
+        className="flex-1 bg-transparent text-sm text-gray-900 leading-relaxed focus:outline-none resize-none border-b border-transparent focus:border-amber-400 transition-colors min-w-0"
+        placeholder="Enter guideline or policy…"
+      />
+      <button type="button" onClick={onRemove} className="flex-shrink-0 p-1 text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 rounded-lg hover:bg-red-50 mt-0.5"><Ic.Trash /></button>
+    </div>
+  );
+};
+
+const KnowBeforeYouGoSection = ({ points, onChange }) => {
+  const [newPt, setNewPt] = useState("");
+  const inputRef = useRef(null);
+
+  const handleAdd = () => {
+    const v = newPt.trim();
+    if (!v) return;
+    onChange([...points, { id: uid(), point: v }]);
+    setNewPt("");
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-start gap-3 mb-5">
+        <div className="w-7 h-7 rounded-lg bg-blue-950 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">5</div>
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-gray-900">Know Before You Go</h3>
+            {points.length > 0 && <span className="text-xs bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-semibold">{points.length} point{points.length > 1 ? "s" : ""}</span>}
+          </div>
+          <p className="text-xs text-gray-400 mt-0.5">Important traveller guidelines, policies and notices</p>
+        </div>
+      </div>
+
+      {points.length === 0 && (
+        <div className="py-8 text-center border-2 border-dashed border-amber-200 rounded-xl bg-amber-50/30 mb-4">
+          <p className="text-sm font-semibold text-amber-800">No guidelines added yet</p>
+          <p className="text-xs text-gray-400 mt-1">Add important policies travellers should know before booking</p>
+        </div>
+      )}
+
+      {points.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {points.map((pt, i) => (
+            <KBYGItem
+              key={pt.id}
+              item={pt}
+              index={i}
+              onBlur={v => onChange(points.map(p => p.id === pt.id ? { ...p, point: v } : p))}
+              onRemove={() => onChange(points.filter(p => p.id !== pt.id))}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          placeholder="Type a guideline and press Enter or click Add…"
+          value={newPt}
+          onChange={e => setNewPt(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleAdd(); } }}
+          className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900/20 bg-white placeholder:text-gray-400"
+        />
+        <Btn variant="primary" size="sm" onClick={handleAdd}><Ic.Plus />Add Point</Btn>
+      </div>
+    </Card>
+  );
+};
+
+// ─── STRING LIST ITEM — top-level so React never re-mounts it on parent re-render ──
+const StringListItem = ({ value, icon, iconCls, rowCls, onCommit, onRemove }) => {
+  const [loc, setLoc] = useState(value);
+  // Only sync from parent when value changes externally (e.g. after delete re-index)
+  const extRef = useRef(value);
+  if (extRef.current !== value) { extRef.current = value; setLoc(value); }
+  return (
+    <div className={cls("flex items-center gap-2 px-3 py-2 rounded-lg group", rowCls)}>
+      <span className={cls("text-sm flex-shrink-0", iconCls)}>{icon}</span>
+      <input
+        type="text"
+        value={loc}
+        onChange={e => setLoc(e.target.value)}
+        onBlur={() => { if (loc !== value) onCommit(loc || value); }}
+        className="flex-1 bg-transparent text-sm text-gray-900 focus:outline-none min-w-0"
+      />
+      <button type="button" onClick={onRemove}
+        className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+        <Ic.Trash />
+      </button>
+    </div>
+  );
+};
+
+// ─── ADDITIONAL INFORMATION SECTION ──────────────────────────────
+// Internal state for all text fields — only flushes to parent on blur to avoid focus loss
+const AdditionalInfoSection = ({ info, onChange }) => {
+  const init = info || emptyAdditionalInfo();
+  const [about, setAbout] = useState(init.aboutDestination || "");
+  const [qi, setQi] = useState(init.quickInfo || { destinationsCovered: "", duration: "", startPoint: "", endPoint: "" });
+  const [exps, setExps] = useState(init.experiencesCovered || []);
+  const [ntm, setNtm] = useState(init.notToMiss || []);
+  const [newExp, setNewExp] = useState("");
+  const [newNtm, setNewNtm] = useState("");
+
+  const flush = (patch) => onChange({ aboutDestination: about, quickInfo: qi, experiencesCovered: exps, notToMiss: ntm, ...patch });
+
+  const addExp = () => {
+    const v = newExp.trim();
+    if (!v) return;
+    const next = [...exps, v];
+    setExps(next);
+    setNewExp("");
+    flush({ experiencesCovered: next });
+  };
+  const addNtm = () => {
+    const v = newNtm.trim();
+    if (!v) return;
+    const next = [...ntm, v];
+    setNtm(next);
+    setNewNtm("");
+    flush({ notToMiss: next });
+  };
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-7 h-7 rounded-lg bg-blue-950 text-white flex items-center justify-center text-sm font-bold">6</div>
+        <div>
+          <h3 className="font-bold text-gray-900">Additional Information</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Destination overview, quick info, experiences and highlights</p>
+        </div>
+      </div>
+      <div className="space-y-5">
+
+        {/* About Destination */}
+        <div>
+          <FL optional>About the Destination</FL>
+          <textarea
+            rows={4}
+            placeholder="Write a compelling overview of the destination for travellers…"
+            value={about}
+            onChange={e => setAbout(e.target.value)}
+            onBlur={() => flush({ aboutDestination: about })}
+            className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 placeholder:text-gray-400 transition-all resize-none"
+          />
+        </div>
+
+        {/* Quick Info */}
+        <div>
+          <FL>Quick Info</FL>
+          <div className="grid grid-cols-2 gap-3 p-4 bg-blue-50 border border-blue-100 rounded-xl">
+            {[
+              ["destinationsCovered", "🗺 Destinations Covered", "e.g. Phuket, Pattaya, Bangkok"],
+              ["duration", "📅 Duration", "e.g. 7 Days, 6 Nights"],
+              ["startPoint", "✈ Start Point", "e.g. Phuket International Airport (HKT)"],
+              ["endPoint", "🏁 End Point", "e.g. Bangkok International Airport (BKK)"],
+            ].map(([key, label, ph]) => (
+              <div key={key}>
+                <label className="block text-xs font-bold text-blue-900 mb-1">{label}</label>
+                <input
+                  type="text"
+                  placeholder={ph}
+                  value={qi[key] || ""}
+                  onChange={e => setQi(q => ({ ...q, [key]: e.target.value }))}
+                  onBlur={() => flush({ quickInfo: qi })}
+                  className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 placeholder:text-gray-400 transition-all"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Experiences Covered */}
+        <div>
+          <FL optional>Experiences Covered</FL>
+          <div className="space-y-2 mb-2">
+            {exps.length === 0 && <p className="text-xs text-gray-400 italic">No experiences added yet</p>}
+            {exps.map((exp, i) => (
+              <StringListItem
+                key={`exp-${i}`}
+                value={exp}
+                icon="✦" iconCls="text-violet-500"
+                rowCls="bg-violet-50 border border-violet-200"
+                onCommit={v => { const next = exps.map((x, j) => j === i ? v : x); setExps(next); flush({ experiencesCovered: next }); }}
+                onRemove={() => { const next = exps.filter((_, j) => j !== i); setExps(next); flush({ experiencesCovered: next }); }}
+              />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input type="text" placeholder="e.g. Snorkeling at Coral Island…" value={newExp} onChange={e => setNewExp(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExp(); } }} className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900/20 bg-white placeholder:text-gray-400" />
+            <Btn variant="primary" size="sm" onClick={addExp}><Ic.Plus />Add</Btn>
+          </div>
+        </div>
+
+        {/* Not to Miss */}
+        <div>
+          <FL optional>Not to Miss</FL>
+          <div className="space-y-2 mb-2">
+            {ntm.length === 0 && <p className="text-xs text-gray-400 italic">No highlights added yet</p>}
+            {ntm.map((item, i) => (
+              <StringListItem
+                key={`ntm-${i}`}
+                value={item}
+                icon="★" iconCls="text-rose-500"
+                rowCls="bg-rose-50 border border-rose-200"
+                onCommit={v => { const next = ntm.map((x, j) => j === i ? v : x); setNtm(next); flush({ notToMiss: next }); }}
+                onRemove={() => { const next = ntm.filter((_, j) => j !== i); setNtm(next); flush({ notToMiss: next }); }}
+              />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input type="text" placeholder="e.g. Kecak fire dance at Uluwatu Temple…" value={newNtm} onChange={e => setNewNtm(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addNtm(); } }} className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900/20 bg-white placeholder:text-gray-400" />
+            <Btn variant="primary" size="sm" onClick={addNtm}><Ic.Plus />Add</Btn>
+          </div>
+        </div>
+
+      </div>
+    </Card>
+  );
+};
+
+// ─── FAQ COMPONENTS ───────────────────────────────────────────────
+const FAQItemForm = ({ faq, index, onUpdate, onRemove }) => {
+  const [open, setOpen] = useState(true);
+  const [q, setQ] = useState(faq.question);
+  const [a, setA] = useState(faq.answer);
+  // Sync if parent sends a reset (e.g. edit loads new data)
+  const prevId = useRef(faq.id);
+  if (prevId.current !== faq.id) { prevId.current = faq.id; setQ(faq.question); setA(faq.answer); }
+  return (
+    <div className="border border-blue-100 rounded-xl overflow-hidden bg-white shadow-sm">
+      <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-r from-blue-50 to-slate-50 border-b border-blue-100">
+        <div className="w-6 h-6 rounded-lg bg-blue-950 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">{index + 1}</div>
+        <p className="flex-1 text-xs font-semibold text-blue-900 truncate min-w-0">
+          {q || <span className="text-gray-400 font-normal italic">Question not set</span>}
+        </p>
+        <button type="button" onClick={() => setOpen(o => !o)} className="p-1.5 text-blue-400 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"><Ic.Chevron open={open} /></button>
+        <button type="button" onClick={() => onRemove(faq.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Ic.Trash /></button>
+      </div>
+      {open && (
+        <div className="p-4 space-y-3">
+          <div>
+            <FL required>Question</FL>
+            <input
+              type="text"
+              placeholder="e.g. Are flights included?"
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              onBlur={() => { if (q !== faq.question) onUpdate(faq.id, "question", q); }}
+              className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 placeholder:text-gray-400 transition-all"
+            />
+          </div>
+          <div>
+            <FL required>Answer</FL>
+            <textarea
+              rows={3}
+              placeholder="Provide a clear, helpful answer…"
+              value={a}
+              onChange={e => setA(e.target.value)}
+              onBlur={() => { if (a !== faq.answer) onUpdate(faq.id, "answer", a); }}
+              className="w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 placeholder:text-gray-400 transition-all resize-none"
+            />
+            {a && <p className="text-xs text-gray-400 mt-1 text-right">{a.length} chars</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const FAQSection = ({ faqs, onChange, sectionNum = 4 }) => {
+  const addFaq = () => onChange([...faqs, emptyFaq()]);
+  const removeFaq = (id) => onChange(faqs.filter(f => f.id !== id));
+  const updateFaq = (id, field, value) => onChange(faqs.map(f => f.id === id ? { ...f, [field]: value } : f));
+  return (
+    <Card className="p-6">
+      <div className="flex items-start justify-between mb-5">
+        <div className="flex items-start gap-3">
+          <div className="w-7 h-7 rounded-lg bg-blue-950 text-white flex items-center justify-center text-sm font-bold flex-shrink-0">{sectionNum}</div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-gray-900">Frequently Asked Questions</h3>
+              {faqs.length > 0 && <span className="text-xs bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full font-semibold">{faqs.length} FAQ{faqs.length > 1 ? "s" : ""}</span>}
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">Common traveller questions — shown as an accordion on the package page</p>
+          </div>
+        </div>
+        <Btn variant="primary" size="sm" onClick={addFaq}><Ic.Plus />Add FAQ</Btn>
+      </div>
+      {faqs.length === 0 && (
+        <div className="py-10 text-center border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/40">
+          <div className="flex justify-center mb-3">
+            <svg className="w-8 h-8 text-blue-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+          <p className="text-sm font-semibold text-blue-900">No FAQs added yet</p>
+          <p className="text-xs text-gray-400 mt-1 mb-4">Add common questions travellers ask about this package</p>
+          <Btn variant="soft" size="sm" onClick={addFaq}><Ic.Plus />Add your first FAQ</Btn>
+        </div>
+      )}
+      {faqs.length > 0 && (
+        <div className="space-y-3">
+          {faqs.map((faq, i) => <FAQItemForm key={faq.id} faq={faq} index={i} onUpdate={updateFaq} onRemove={removeFaq} />)}
+          <button type="button" onClick={addFaq}
+            className="w-full py-3 border-2 border-dashed border-blue-200 rounded-xl text-xs font-semibold text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-all flex items-center justify-center gap-1.5">
+            <Ic.Plus />Add another FAQ
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+};
+
+// FAQ Accordion Display (View Page)
+const FAQDisplay = ({ faqs }) => {
+  const [openId, setOpenId] = useState(null);
+  const [showAll, setShowAll] = useState(false);
+  const PREVIEW = 5;
+  if (!faqs?.length) return null;
+  const visible = showAll ? faqs : faqs.slice(0, PREVIEW);
+  const hasMore = faqs.length > PREVIEW;
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h3 className="text-base font-bold text-gray-900">Frequently Asked Questions</h3>
+          <p className="text-xs text-gray-400 mt-0.5">{faqs.length} question{faqs.length > 1 ? "s" : ""}</p>
+        </div>
+        <div className="w-9 h-9 rounded-full bg-blue-950 text-white flex items-center justify-center text-sm font-bold">?</div>
+      </div>
+      <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+        {visible.map((faq, i) => {
+          const isOpen = openId === faq.id;
+          return (
+            <div key={faq.id} className="bg-white">
+              <button type="button" onClick={() => setOpenId(isOpen ? null : faq.id)}
+                className={cls("w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-all", isOpen ? "bg-blue-950 text-white" : "bg-white text-gray-800 hover:bg-blue-50")}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={cls("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors", isOpen ? "bg-white/20 text-white" : "bg-blue-100 text-blue-900")}>{i + 1}</div>
+                  <span className={cls("text-sm font-semibold leading-snug", isOpen ? "text-white" : "text-gray-900")}>{faq.question}</span>
+                </div>
+                <div className={cls("flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-all", isOpen ? "bg-white/20 text-white rotate-180" : "bg-gray-100 text-gray-500")}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </button>
+              <div className={cls("overflow-hidden transition-all duration-300 ease-in-out", isOpen ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0")}>
+                <div className="px-5 pb-5 pt-4 bg-blue-50/60 border-t border-blue-100">
+                  <div className="flex gap-3">
+                    <div className="w-0.5 bg-blue-300 rounded-full flex-shrink-0 self-stretch min-h-[1.5rem]" />
+                    <p className="text-sm text-gray-700 leading-relaxed">{faq.answer}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {hasMore && (
+        <div className="mt-4 text-center">
+          <button type="button" onClick={() => setShowAll(s => !s)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 border border-blue-200 bg-white text-blue-900 text-sm font-semibold rounded-xl hover:bg-blue-50 hover:border-blue-400 transition-all shadow-sm">
+            {showAll ? <>↑ Show fewer FAQs</> : <>↓ Load {faqs.length - PREVIEW} more FAQ{faqs.length - PREVIEW > 1 ? "s" : ""}</>}
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+};
+
+// ─── PACKAGE FORM ─────────────────────────────────────────────────
+const PackageForm = ({ initial, onSave, onCancel, mode }) => {
+  const [form, setForm] = useState(initial);
+  const [itinerary, setItinerary] = useState(initial.itinerary || []);
+  const [faqs, setFaqs] = useState(initial.faqs || []);
+  const [inclusions, setInclusions] = useState(initial.inclusions || []);
+  const [exclusions, setExclusions] = useState(initial.exclusions || []);
+  const [knowBeforeYouGo, setKnowBeforeYouGo] = useState(initial.knowBeforeYouGo || []);
+  const [additionalInfo, setAdditionalInfo] = useState(initial.additionalInfo || emptyAdditionalInfo());
+  const [tab, setTab] = useState("builder");
+  const upd = (f, v) => setForm(p => ({ ...p, [f]: v }));
+  const updPx = (f, v) => setForm(p => ({ ...p, price: { ...p.price, [f]: v } }));
+
+  const handleDurationChange = (dur) => {
+    upd("tripDuration", dur);
+    const n = parseDays(dur);
+    setItinerary(old => {
+      if (n === old.length) return old;
+      if (n > old.length) return [...old, ...Array.from({ length: n - old.length }, (_, i) => makeDay(old.length + i + 1))];
+      return old.slice(0, n);
+    });
+  };
+
+  const currObj = CURRENCIES.find(c => c.code === (form.price?.currency || "INR")) || CURRENCIES[0];
+  const sym = currObj.symbol;
+
+  return (
+    <div className="max-w-5xl mx-auto pb-10 space-y-6">
+      {/* SECTION 1 — Basic Package Info + Price */}
+      <Card className="p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-7 h-7 rounded-lg bg-blue-950 text-white flex items-center justify-center text-sm font-bold">1</div>
+          <h3 className="font-bold text-gray-900">Package Information</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2"><FL required>Package Title</FL><Inp placeholder="e.g. Bali Royal Escape" value={form.title || ""} onChange={e => upd("title", e.target.value)} /></div>
+          <div><FL required>Destination</FL><Inp placeholder="e.g. Bali, Indonesia" value={form.destination || ""} onChange={e => upd("destination", e.target.value)} /></div>
+          <div>
+            <FL required>Trip Duration</FL>
+            <Sel options={DURATION_OPTIONS} placeholder="Select duration" value={form.tripDuration || ""} onChange={e => handleDurationChange(e.target.value)} />
+            {itinerary.length > 0 && <p className="text-xs text-emerald-600 mt-1 font-medium flex items-center gap-1"><Ic.Check />{itinerary.length} days auto-generated</p>}
+          </div>
+
+          {/* ── Price + Currency ── */}
+          <div className="col-span-2">
+            <FL required>Price per Person</FL>
+            <div className="flex gap-3">
+              {/* Currency dropdown */}
+              <div className="w-56 flex-shrink-0">
+                <select
+                  value={form.price?.currency || "INR"}
+                  onChange={e => updPx("currency", e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 transition-all cursor-pointer">
+                  {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                </select>
+              </div>
+              {/* Amount input with symbol prefix */}
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold select-none">{sym}</span>
+                <Inp
+                  type="number"
+                  placeholder="0.00"
+                  value={form.price?.amount || ""}
+                  onChange={e => updPx("amount", e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            {form.price?.amount && Number(form.price.amount) > 0 && (
+              <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                <Ic.Check />
+                Display: <strong className="ml-1 text-blue-900">{sym}{Number(form.price.amount).toLocaleString("en-IN")} {form.price?.currency}</strong>
+              </p>
+            )}
+          </div>
+
+          <div><FL>Travel Style</FL><Sel options={OPTIONS.travelStyle} placeholder="Select…" value={form.travelStyle || ""} onChange={e => upd("travelStyle", e.target.value)} /></div>
+          <div><FL>Exclusivity</FL><Sel options={OPTIONS.exclusivity} placeholder="Select…" value={form.exclusivityLevel || ""} onChange={e => upd("exclusivityLevel", e.target.value)} /></div>
+          <div className="col-span-2"><FL>Short Description</FL><Inp placeholder="1-line teaser for listing cards" value={form.shortDescription || ""} onChange={e => upd("shortDescription", e.target.value)} /></div>
+          <div className="col-span-2"><FL optional>Full Description</FL><TA placeholder="Detailed narrative about the package…" value={form.longDescription || ""} onChange={e => upd("longDescription", e.target.value)} rows={3} /></div>
+        </div>
+      </Card>
+
+      {/* SECTION 2 — Itinerary Builder with tabs */}
+      <Card className="overflow-hidden">
+        <div className="border-b border-gray-100 bg-gray-50 px-6 pt-4 pb-0">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-lg bg-blue-950 text-white flex items-center justify-center text-sm font-bold">2</div>
+              <h3 className="font-bold text-gray-900">Itinerary Builder</h3>
+              {itinerary.length > 0 && <span className="text-xs bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">{itinerary.length} Days</span>}
+            </div>
+          </div>
+          <div className="flex gap-0">
+            {[["builder", <><Ic.Package /> Builder</>], ["summary", <><Ic.Summary /> Summarised View</>]].map(([key, label]) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={cls("flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all", tab === key ? "border-blue-950 text-blue-950 bg-white" : "border-transparent text-gray-500 hover:text-gray-700")}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="p-6">
+          {tab === "builder" && <ItineraryBuilder itinerary={itinerary} setItinerary={setItinerary} />}
+          {tab === "summary" && <SummarisedView itinerary={itinerary} pkg={form} />}
+        </div>
+      </Card>
+
+      {/* SECTION 3 — Inclusions & Exclusions */}
+      <InclusionsExclusionsSection
+        inclusions={inclusions} exclusions={exclusions}
+        onChangeInc={setInclusions} onChangeExc={setExclusions}
+      />
+
+      {/* SECTION 4 — FAQs */}
+      <FAQSection faqs={faqs} onChange={setFaqs} sectionNum={4} />
+
+      {/* SECTION 5 — Know Before You Go */}
+      <KnowBeforeYouGoSection points={knowBeforeYouGo} onChange={setKnowBeforeYouGo} />
+
+      {/* SECTION 6 — Additional Information */}
+      <AdditionalInfoSection info={additionalInfo} onChange={setAdditionalInfo} />
+
+      <div className="flex justify-end gap-3">
+        <Btn variant="outline" onClick={onCancel}>Cancel</Btn>
+        <Btn variant="success" onClick={() => onSave({ ...form, itinerary, faqs, inclusions, exclusions, knowBeforeYouGo, additionalInfo })}>
+          {mode === "create" ? "✓ Create Package" : "✓ Save Changes"}
+        </Btn>
+      </div>
+    </div>
+  );
+};
+
+// ─── VIEW PACKAGE ─────────────────────────────────────────────────
+const ViewPackage = ({ pkg, onEdit }) => {
+  const [tab, setTab] = useState("summary");
+  const sym = getCurrSym(pkg.price?.currency);
+  const [kbygOpen, setKbygOpen] = useState(true);
+  const [addInfoOpen, setAddInfoOpen] = useState(false);
+
+  const tabs = [
+    ["summary", "Summary"],
+    ["inclusions", "What's Inside"],
+    ["kbyg", "Know Before You Go"],
+    ["faqs", `FAQs${pkg.faqs?.length ? ` (${pkg.faqs.length})` : ""}`],
+    ["additional", "Additional Info"],
+  ];
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-5">
+      {/* Hero */}
+      <div className="bg-blue-950 text-white rounded-xl p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold">{pkg.title || pkg.destination}</h2>
+            <p className="text-blue-300 flex items-center gap-1 mt-1"><Ic.MapPin />{pkg.destination} · {pkg.tripDuration}</p>
+            {pkg.shortDescription && <p className="text-blue-200/70 text-sm mt-2 max-w-xl">{pkg.shortDescription}</p>}
+            <div className="flex gap-2 mt-3 flex-wrap">
+              {pkg.travelStyle && <span className="text-xs bg-white/15 px-2.5 py-1 rounded-full font-medium">{pkg.travelStyle}</span>}
+              {pkg.exclusivityLevel && <span className="text-xs bg-white/15 px-2.5 py-1 rounded-full font-medium">{pkg.exclusivityLevel}</span>}
+            </div>
+          </div>
+          <div className="text-right flex-shrink-0">
+            {pkg.price?.amount && Number(pkg.price.amount) > 0 ? (
+              <>
+                <p className="text-3xl font-bold">{sym}{Number(pkg.price.amount).toLocaleString("en-IN")}</p>
+                <p className="text-xs text-blue-400 mt-1">{pkg.price?.currency} / person</p>
+              </>
+            ) : (
+              <p className="text-sm text-blue-400">Price not set</p>
+            )}
+            <Btn variant="secondary" size="sm" className="mt-3" onClick={onEdit}><Ic.Edit />Edit Package</Btn>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 overflow-x-auto">
+        {tabs.map(([key, label]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={cls("flex-shrink-0 px-5 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap", tab === key ? "border-blue-950 text-blue-950" : "border-transparent text-gray-500 hover:text-gray-700")}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Summary Tab */}
+      {tab === "summary" && <SummarisedView itinerary={pkg.itinerary || []} pkg={pkg} />}
+
+      {/* What's Inside Tab */}
+      {tab === "inclusions" && (
+        <Card className="p-6">
+          <h3 className="text-base font-bold text-gray-900 mb-5">What's Inside the Package?</h3>
+          <div className="grid grid-cols-2 gap-8">
+            {/* Inclusions */}
+            <div>
+              <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold">✓</div>
+                Inclusions <span className="text-gray-400 font-normal">({(pkg.inclusions || []).length})</span>
+              </h4>
+              {(pkg.inclusions || []).length === 0
+                ? <p className="text-sm text-gray-400 italic">No inclusions listed</p>
+                : <ul className="space-y-2.5">{pkg.inclusions.map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                    <svg className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span className="leading-snug">{item}</span>
+                  </li>
+                ))}</ul>
+              }
+            </div>
+            {/* Divider */}
+            <div className="border-l border-gray-200 pl-8">
+              <h4 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">✕</div>
+                Exclusions <span className="text-gray-400 font-normal">({(pkg.exclusions || []).length})</span>
+              </h4>
+              {(pkg.exclusions || []).length === 0
+                ? <p className="text-sm text-gray-400 italic">No exclusions listed</p>
+                : <ul className="space-y-2.5">{pkg.exclusions.map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                    <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span className="leading-snug">{item}</span>
+                  </li>
+                ))}</ul>
+              }
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Know Before You Go Tab */}
+      {tab === "kbyg" && (
+        <Card className="overflow-hidden">
+          <button type="button" onClick={() => setKbygOpen(o => !o)}
+            className="w-full flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 hover:bg-gray-50 transition-colors">
+            <h3 className="text-base font-bold text-gray-900">Know Before You Go</h3>
+            <Ic.Chevron open={kbygOpen} />
+          </button>
+          {kbygOpen && (
+            <div className="px-6 py-5">
+              {(pkg.knowBeforeYouGo || []).length === 0
+                ? <p className="text-sm text-gray-400 italic text-center py-6">No guidelines added</p>
+                : <ul className="space-y-3">
+                  {pkg.knowBeforeYouGo.map((pt, i) => (
+                    <li key={pt.id || i} className="flex items-start gap-3 text-sm text-gray-700 leading-relaxed">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-950 mt-2 flex-shrink-0" />
+                      <span>{pt.point}</span>
+                    </li>
+                  ))}
+                </ul>
+              }
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* FAQs Tab */}
+      {tab === "faqs" && (
+        pkg.faqs?.length > 0
+          ? <FAQDisplay faqs={pkg.faqs} />
+          : <div className="py-16 text-center border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/40">
+            <p className="text-sm font-semibold text-blue-900">No FAQs added</p>
+            <p className="text-xs text-gray-400 mt-1">Edit this package to add FAQs</p>
+          </div>
+      )}
+
+      {/* Additional Information Tab */}
+      {tab === "additional" && (() => {
+        const ai = pkg.additionalInfo;
+        if (!ai || (!ai.aboutDestination && !ai.quickInfo?.destinationsCovered && !(ai.experiencesCovered?.length) && !(ai.notToMiss?.length)))
+          return (
+            <div className="py-16 text-center border-2 border-dashed border-blue-200 rounded-xl bg-blue-50/40">
+              <p className="text-sm font-semibold text-blue-900">No additional information added</p>
+              <p className="text-xs text-gray-400 mt-1">Edit this package to add destination info</p>
+            </div>
+          );
+        return (
+          <div className="space-y-4">
+            {/* About Destination */}
+            {ai.aboutDestination && (
+              <Card className="p-6">
+                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">About the Destination</h4>
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{ai.aboutDestination}</p>
+              </Card>
+            )}
+
+            {/* Quick Info */}
+            {(ai.quickInfo?.destinationsCovered || ai.quickInfo?.duration || ai.quickInfo?.startPoint || ai.quickInfo?.endPoint) && (
+              <Card className="p-6">
+                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Quick Info</h4>
+                <div className="space-y-3">
+                  {[
+                    ["🗺", "Destinations Covered", "destinationsCovered"],
+                    ["📅", "Duration", "duration"],
+                    ["✈", "Start Point", "startPoint"],
+                    ["🏁", "End Point", "endPoint"],
+                  ].filter(([, , k]) => ai.quickInfo?.[k]).map(([icon, label, key]) => (
+                    <div key={key} className="flex items-start gap-3 text-sm">
+                      <span className="text-lg flex-shrink-0">{icon}</span>
+                      <div>
+                        <span className="font-bold text-gray-900">{label}: </span>
+                        <span className="text-gray-700">{ai.quickInfo[key]}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Experiences Covered */}
+            {ai.experiencesCovered?.length > 0 && (
+              <Card className="p-6">
+                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Experiences Covered</h4>
+                <ul className="space-y-2.5">
+                  {ai.experiencesCovered.map((exp, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                      <span className="text-violet-500 font-bold flex-shrink-0 mt-0.5">✦</span>
+                      <span className="leading-snug">{exp}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
+            {/* Not to Miss */}
+            {ai.notToMiss?.length > 0 && (
+              <Card className="p-6">
+                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Not to Miss</h4>
+                <ul className="space-y-2.5">
+                  {ai.notToMiss.map((item, i) => (
+                    <li key={i} className="flex items-start gap-3 text-sm text-gray-700">
+                      <span className="text-rose-500 font-bold flex-shrink-0 mt-0.5">★</span>
+                      <span className="leading-snug">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
+
+// ─── PACKAGES LISTING ─────────────────────────────────────────────
+const PackagesListing = ({ setPage, setSelectedId }) => {
+  const { packages, setPackages } = useStore();
+  const [search, setSearch] = useState("");
+  const filtered = packages.filter(p => !search || p.title?.toLowerCase().includes(search.toLowerCase()) || p.destination?.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Ic.Search /></div><Inp className="pl-9" placeholder="Search packages…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <Btn className="ml-auto" onClick={() => setPage("create")}><Ic.Plus />Create Package</Btn>
+      </div>
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/80">
+                {["Package", "Duration", "Style", "Exclusivity", "Itinerary Stats", "Price", "Actions"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-12 text-gray-400 text-sm">No packages found</td></tr>}
+              {filtered.map(pkg => {
+                const totalH = pkg.itinerary?.reduce((s, d) => s + (d.hotelStays?.length || 0), 0) || 0;
+                const totalA = pkg.itinerary?.reduce((s, d) => s + (d.activities?.length || 0), 0) || 0;
+                const totalT = pkg.itinerary?.reduce((s, d) => s + (d.transfers?.length || 0), 0) || 0;
+                const linked = pkg.itinerary?.reduce((s, d) => s + d.activities.filter(a => a.activityRef).length + d.hotelStays.filter(h => h.hotelRef).length, 0) || 0;
+                return (
+                  <tr key={pkg.id} className="hover:bg-blue-50/20 transition-colors">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-900 flex-shrink-0"><Ic.Globe /></div>
+                        <div>
+                          <p className="font-bold text-gray-900 text-sm leading-tight">{pkg.title || pkg.destination}</p>
+                          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Ic.MapPin />{pkg.destination}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600 whitespace-nowrap">{pkg.tripDuration}</td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600">{pkg.travelStyle || "—"}</td>
+                    <td className="px-4 py-3.5"><Badge className="bg-violet-50 text-violet-700 border-violet-200">{pkg.exclusivityLevel || "—"}</Badge></td>
+                    <td className="px-4 py-3.5">
+                      <div className="text-xs text-gray-500 space-y-0.5">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1"><Ic.Hotel />{totalH}</span>
+                          <span className="flex items-center gap-1"><Ic.Activity />{totalA}</span>
+                          <span className="flex items-center gap-1"><Ic.Car />{totalT}</span>
+                        </div>
+                        {linked > 0 && <div className="flex items-center gap-1 text-emerald-600 font-semibold"><Ic.Sync />{linked} master-linked</div>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 font-bold text-blue-900 whitespace-nowrap">
+                      {getCurrSym(pkg.price?.currency)}{Number(pkg.price?.amount || 0).toLocaleString("en-IN")}
+                      <span className="text-xs text-gray-400 font-normal ml-1">{pkg.price?.currency}</span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-0.5">
+                        <button onClick={() => { setSelectedId(pkg.id); setPage("view"); }} className="p-1.5 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"><Ic.Eye /></button>
+                        <button onClick={() => { setSelectedId(pkg.id); setPage("edit"); }} className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors"><Ic.Edit /></button>
+                        <button onClick={() => { if (window.confirm("Delete this package?")) setPackages(p => p.filter(x => x.id !== pkg.id)); }} className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Ic.Trash /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/60 rounded-b-xl">
+          <p className="text-xs text-gray-500">{filtered.length} of {packages.length} packages</p>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// ─── DASHBOARD ────────────────────────────────────────────────────
+const Dashboard = ({ setPage }) => {
+  const { packages, masterActivities, masterHotels } = useStore();
+  const totalDays = packages.reduce((s, p) => s + (p.itinerary?.length || 0), 0);
+  const linkedActs = packages.reduce((s, p) => s + p.itinerary.reduce((sd, d) => sd + d.activities.filter(a => a.activityRef).length, 0), 0);
+  const linkedHotels = packages.reduce((s, p) => s + p.itinerary.reduce((sd, d) => sd + d.hotelStays.filter(h => h.hotelRef).length, 0), 0);
+  const unlinkedActs = packages.reduce((s, p) => s + p.itinerary.reduce((sd, d) => sd + d.activities.filter(a => !a.activityRef).length, 0), 0);
+
+  const stats = [
+    { label: "Packages", value: packages.length, sub: "In catalog", color: "bg-blue-950", icon: <Ic.Package /> },
+    { label: "Itinerary Days", value: totalDays, sub: "Total days planned", color: "bg-emerald-700", icon: <Ic.Summary /> },
+    { label: "Master Activities", value: masterActivities.length, sub: `${linkedActs} linked in pkgs`, color: "bg-violet-700", icon: <Ic.Activity /> },
+    { label: "Master Hotels", value: masterHotels.length, sub: `${linkedHotels} linked in pkgs`, color: "bg-amber-600", icon: <Ic.Hotel /> },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Sync banner */}
+      <div className="p-4 bg-gradient-to-r from-blue-950 to-blue-900 rounded-xl text-white flex items-start gap-4">
+        <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0"><Ic.Sync /></div>
+        <div className="flex-1">
+          <p className="text-sm font-bold">Two-Way Sync Architecture Active</p>
+          <p className="text-xs text-blue-300 mt-0.5">
+            Master Activities & Hotels sync to all packages via <code className="bg-white/10 px-1 rounded">activityRef</code> / <code className="bg-white/10 px-1 rounded">hotelRef</code> ObjectIds.
+            Edit a master record → all packages reflect changes instantly via MongoDB populate().
+          </p>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <Btn variant="ghost" size="sm" className="text-blue-200 hover:bg-white/10" onClick={() => setPage("master-activities")}><Ic.Activity />Activities</Btn>
+          <Btn variant="ghost" size="sm" className="text-blue-200 hover:bg-white/10" onClick={() => setPage("master-hotels")}><Ic.Hotel />Hotels</Btn>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {stats.map(({ label, value, sub, color, icon }) => (
+          <Card key={label} className="p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1 leading-none">{value}</p>
+                <p className="text-xs text-gray-400 mt-2">{sub}</p>
+              </div>
+              <div className={cls("w-9 h-9 rounded-xl flex items-center justify-center text-white flex-shrink-0", color)}>{icon}</div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-5">
+        <div className="col-span-2">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-800">Recent Packages</h3>
+              <Btn variant="ghost" size="sm" onClick={() => setPage("packages")}>View all →</Btn>
+            </div>
+            <div className="space-y-3">
+              {packages.slice(0, 4).map(pkg => {
+                const linked = pkg.itinerary.reduce((s, d) => s + d.activities.filter(a => a.activityRef).length + d.hotelStays.filter(h => h.hotelRef).length, 0);
+                return (
+                  <div key={pkg.id} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-900"><Ic.Globe /></div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">{pkg.title || pkg.destination}</p>
+                        <p className="text-xs text-gray-400">{pkg.tripDuration} · {linked} master-linked item{linked !== 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-blue-900">{getCurrSym(pkg.price?.currency)}{Number(pkg.price?.amount || 0).toLocaleString("en-IN")}</p>
+                      <p className="text-xs text-gray-400">{pkg.price?.currency}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+
+        <Card className="p-5">
+          <h3 className="text-sm font-bold text-gray-800 mb-4">Quick Actions</h3>
+          <div className="space-y-2.5">
+            <Btn className="w-full" onClick={() => setPage("create")}><Ic.Plus />Create Package</Btn>
+            <Btn variant="secondary" className="w-full" onClick={() => setPage("master-activities")}><Ic.Activity />Manage Activities</Btn>
+            <Btn variant="secondary" className="w-full" onClick={() => setPage("master-hotels")}><Ic.Hotel />Manage Hotels</Btn>
+          </div>
+          <div className="mt-5 pt-4 border-t border-gray-100">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Catalog Health</p>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between text-gray-600"><span>Master activities linked</span><span className="font-bold text-emerald-700">{linkedActs}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Master hotels linked</span><span className="font-bold text-emerald-700">{linkedHotels}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Unlinked activities</span><span className={cls("font-bold", unlinkedActs > 0 ? "text-amber-600" : "text-gray-400")}>{unlinkedActs}</span></div>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────
+const Sidebar = ({ page, setPage, counts }) => {
+  const nav = [
+    { key: "dashboard", label: "Dashboard", icon: <Ic.Dashboard />, group: "main" },
+    { key: "packages", label: "Travel Packages", icon: <Ic.Package />, group: "main", badge: counts.packages },
+    { key: "master-activities", label: "Activities", icon: <Ic.Activity />, group: "master", badge: counts.activities },
+    { key: "master-hotels", label: "Hotels", icon: <Ic.Hotel />, group: "master", badge: counts.hotels },
+  ];
+  const isActive = (key) => key === "dashboard" ? page === "dashboard" : key === "packages" ? ["packages", "create", "edit", "view"].includes(page) : page === key;
+  return (
+    <aside className="fixed left-0 top-0 h-screen w-60 bg-blue-950 text-white flex flex-col z-30 shadow-xl">
+      <div className="px-5 py-5 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg"><Ic.Globe /></div>
+          <div><div className="font-bold text-sm tracking-wide">Aventara Elite</div><div className="text-xs text-blue-400">Admin Panel v6</div></div>
+        </div>
+      </div>
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        <div className="space-y-0.5">
+          {nav.filter(n => n.group === "main").map(item => (
+            <button key={item.key} onClick={() => setPage(item.key)}
+              className={cls("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all", isActive(item.key) ? "bg-white/15 text-white" : "text-blue-300 hover:bg-white/8 hover:text-white")}>
+              {item.icon}<span className="flex-1 text-left">{item.label}</span>
+              {item.badge !== undefined && <span className={cls("text-xs px-2 py-0.5 rounded-full font-bold", isActive(item.key) ? "bg-white/20 text-white" : "bg-blue-900 text-blue-300")}>{item.badge}</span>}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs font-bold text-blue-500 uppercase tracking-widest px-3 pt-4 pb-2">Master Catalog</p>
+        <div className="space-y-0.5">
+          {nav.filter(n => n.group === "master").map(item => (
+            <button key={item.key} onClick={() => setPage(item.key)}
+              className={cls("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all", isActive(item.key) ? "bg-white/15 text-white" : "text-blue-300 hover:bg-white/8 hover:text-white")}>
+              {item.icon}<span className="flex-1 text-left">{item.label}</span>
+              {item.badge !== undefined && <span className={cls("text-xs px-2 py-0.5 rounded-full font-bold", isActive(item.key) ? "bg-white/20 text-white" : "bg-blue-900 text-blue-300")}>{item.badge}</span>}
+            </button>
+          ))}
+        </div>
+      </nav>
+      <div className="px-4 py-3 mx-3 mb-4 bg-blue-900/50 rounded-xl border border-blue-800/60 text-xs text-blue-300 space-y-0.5">
+        <p className="font-bold text-blue-200">v6 Features</p>
+        <p>✓ Master Activity catalog</p><p>✓ Master Hotel catalog</p>
+        <p>✓ Two-way activityRef/hotelRef sync</p>
+        <p>✓ Summarised View tab</p><p>✓ Override fields per package</p>
+      </div>
+      <div className="px-5 py-3 border-t border-white/10"><p className="text-xs text-blue-600">© 2025 Aventara Elite</p></div>
+    </aside>
+  );
+};
+
+// ─── TOPBAR ───────────────────────────────────────────────────────
+const Topbar = ({ title, subtitle }) => (
+  <header className="fixed top-0 left-60 right-0 h-16 bg-white border-b border-gray-100 flex items-center px-6 z-20 shadow-sm">
+    <div>
+      <h1 className="text-base font-bold text-gray-900 leading-tight">{title}</h1>
+      {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+    </div>
+  </header>
+);
+
+// ─── APP ROOT ─────────────────────────────────────────────────────
+export default function App() {
+  const [formData, setFormData] = useState({
+    title: "",
+    destination: "",
+    duration: "",
+    price: 0,
+    currency: "INR",
+    travelStyle: "",
+    exclusivity: "",
+    shortDescription: "",
+    fullDescription: "",
+    itinerary: [],
+    inclusions: [],
+    exclusions: [],
+    faqs: [],
+    guidelines: [],
+    aboutDestination: "",
+    quickInfo: {},
+    experiencesCovered: [],
+    notToMiss: [],
+  });
+  const [page, setPage] = useState("dashboard");
+  const [packages, setPackages] = useState(INIT_PACKAGES);
+  const [masterActivities, setMasterActivities] = useState(INIT_ACTIVITIES);
+  const [masterHotels, setMasterHotels] = useState(INIT_HOTELS);
+  const [selectedId, setSelectedId] = useState(null);
+  const fetchPackages = async () => {
+    try {
+      const res = await fetch("/api");
+      const result = await res.json();
+
+      if (result.success) {
+        setPackages(result.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPackages();
+  }, []);
+  const selectedPkg = packages.find(p => p.id === selectedId);
+
+  const store = { packages, setPackages, masterActivities, setMasterActivities, masterHotels, setMasterHotels };
+
+  const PAGE_META = {
+    dashboard: { title: "Dashboard", subtitle: "Aventara Elite — Travel Management" },
+    packages: { title: "Travel Packages", subtitle: `${packages.length} packages in catalog` },
+    create: { title: "Create Package", subtitle: "Add a new travel package" },
+    edit: { title: "Edit Package", subtitle: selectedPkg ? `Editing: ${selectedPkg.title || selectedPkg.destination}` : "" },
+    view: { title: "Package Details", subtitle: selectedPkg ? `${selectedPkg.destination} · ${selectedPkg.tripDuration}` : "" },
+    "master-activities": { title: "Master Activities", subtitle: `${masterActivities.length} reusable activities in global catalog` },
+    "master-hotels": { title: "Master Hotels", subtitle: `${masterHotels.length} hotels in global catalog` },
+  };
+  const meta = PAGE_META[page] || PAGE_META.dashboard;
+
+  const emptyPkg = () => ({
+    id: uid(), title: "", destination: "", tripDuration: "", travelStyle: "", tourType: "",
+    exclusivityLevel: "Premium", price: { currency: "INR", amount: "" },
+    shortDescription: "", longDescription: "",
+    availability: { availableMonths: [], fixedDepartureDates: [], blackoutDates: [] },
+    inclusions: [], exclusions: [], knowBeforeYouGo: [], additionalInfo: emptyAdditionalInfo(), faqs: [], itinerary: [], createdAt: new Date().toISOString().split("T")[0],
+  });
+
+  // const handleInputChange = (e:any) => {
+  //   const {name, value} = e.target
+  // }
+
+  const handleCreate = async () => {
+    try {
+      const formattedPackage = {
+        ...formData,
+
+        itinerary: formData.itinerary.map((day, index) => ({
+          dayNumber: index + 1,
+          dayTitle: day.dayTitle,
+          city: day.city,
+          dayType: day.dayType,
+
+          mealsIncluded: day.meals || {},
+
+          hotelStays: day.hotelStays?.map((hotel) => ({
+            hotelRef: hotel.hotelRef, // only _id
+            roomType: hotel.roomType,
+            checkIn: hotel.checkIn,
+            checkOut: hotel.checkOut,
+            meals: hotel.meals,
+            notes: hotel.notes,
+          })) || [],
+
+          activities: day.activities?.map((act) => ({
+            activityRef: act.activityRef, // only _id
+            activityTime: act.activityTime,
+            coverTitle: act.coverTitle,
+            customTitle: act.customTitle,
+            customDescription: act.customDescription,
+            guideIncluded: act.guideIncluded,
+            ticketIncluded: act.ticketIncluded,
+          })) || [],
+        })),
+      };
+
+      console.log(formattedPackage)
+
+      const res = await fetch("/api", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formattedPackage),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        alert("Package saved ✅");
+        fetchPackages();
+        setPage("packages");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  const handleEdit = (data) => { setPackages(p => p.map(x => x.id === data.id ? data : x)); setPage("packages"); };
+
+  return (
+    <StoreContext.Provider value={store}>
+      <div className="min-h-screen bg-gray-50/80">
+        <Sidebar page={page} setPage={setPage} counts={{ packages: packages.length, activities: masterActivities.length, hotels: masterHotels.length }} />
+        <Topbar title={meta.title} subtitle={meta.subtitle} />
+        <main className="ml-60 pt-16 min-h-screen">
+          <div className="p-6 max-w-[1400px]">
+            {["create", "edit", "view"].includes(page) && (
+              <button onClick={() => setPage("packages")} className="inline-flex items-center gap-1.5 text-sm text-blue-900 font-semibold mb-5 hover:underline"><Ic.Back />Back to Packages</button>
+            )}
+            {page === "dashboard" && <Dashboard setPage={setPage} />}
+            {page === "packages" && <PackagesListing setPage={setPage} setSelectedId={setSelectedId} />}
+            {page === "create" && <PackageForm initial={emptyPkg()} mode="create" onSave={handleCreate} onCancel={() => setPage("packages")} />}
+            {page === "edit" && selectedPkg && <PackageForm key={selectedPkg.id} initial={selectedPkg} mode="edit" onSave={handleEdit} onCancel={() => setPage("packages")} />}
+            {page === "view" && selectedPkg && <ViewPackage pkg={selectedPkg} onEdit={() => setPage("edit")} />}
+            {page === "master-activities" && <MasterActivitiesPage />}
+            {page === "master-hotels" && <MasterHotelsPage />}
+          </div>
+        </main>
+      </div>
+    </StoreContext.Provider>
+  );
+}
