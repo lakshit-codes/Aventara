@@ -2182,26 +2182,26 @@ const Topbar = ({ title, subtitle }) => (
 
 // ─── APP ROOT ─────────────────────────────────────────────────────
 export default function App() {
-  const [formData, setFormData] = useState({
-    title: "",
-    destination: "",
-    duration: "",
-    price: 0,
-    currency: "INR",
-    travelStyle: "",
-    exclusivity: "",
-    shortDescription: "",
-    fullDescription: "",
-    itinerary: [],
-    inclusions: [],
-    exclusions: [],
-    faqs: [],
-    guidelines: [],
-    aboutDestination: "",
-    quickInfo: {},
-    experiencesCovered: [],
-    notToMiss: [],
-  });
+  // const [formData, setFormData] = useState({
+  //   title: "",
+  //   destination: "",
+  //   duration: "",
+  //   price: 0,
+  //   currency: "INR",
+  //   travelStyle: "",
+  //   exclusivity: "",
+  //   shortDescription: "",
+  //   fullDescription: "",
+  //   itinerary: [],
+  //   inclusions: [],
+  //   exclusions: [],
+  //   faqs: [],
+  //   guidelines: [],
+  //   aboutDestination: "",
+  //   quickInfo: {},
+  //   experiencesCovered: [],
+  //   notToMiss: [],
+  // });
   const [page, setPage] = useState("dashboard");
   const [packages, setPackages] = useState(INIT_PACKAGES);
   const [masterActivities, setMasterActivities] = useState(INIT_ACTIVITIES);
@@ -2250,61 +2250,61 @@ export default function App() {
   //   const {name, value} = e.target
   // }
 
-  const handleCreate = async () => {
-    try {
-      const formattedPackage = {
-        ...formData,
+const handleCreate = async (packageData) => {
+  try {
+    const formattedPackage = {
+      ...packageData,
 
-        itinerary: formData.itinerary.map((day, index) => ({
-          dayNumber: index + 1,
-          dayTitle: day.dayTitle,
-          city: day.city,
-          dayType: day.dayType,
+      itinerary: packageData.itinerary.map((day, index) => ({
+        dayNumber: index + 1,
+        dayTitle: day.dayTitle,
+        city: day.city,
+        dayType: day.dayType,
+        mealsIncluded: day.meals || {},
 
-          mealsIncluded: day.meals || {},
+        hotelStays: day.hotelStays?.map((hotel) => ({
+          hotelRef: hotel.hotelRef,
+          roomType: hotel.roomType,
+          checkIn: hotel.checkIn,
+          checkOut: hotel.checkOut,
+          meals: hotel.meals,
+          notes: hotel.notes,
+        })) || [],
 
-          hotelStays: day.hotelStays?.map((hotel) => ({
-            hotelRef: hotel.hotelRef, // only _id
-            roomType: hotel.roomType,
-            checkIn: hotel.checkIn,
-            checkOut: hotel.checkOut,
-            meals: hotel.meals,
-            notes: hotel.notes,
-          })) || [],
+        activities: day.activities?.map((act) => ({
+          activityRef: act.activityRef,
+          activityTime: act.activityTime,
+          coverTitle: act.coverTitle,
+          customTitle: act.customTitle,
+          customDescription: act.customDescription,
+          guideIncluded: act.guideIncluded,
+          ticketIncluded: act.ticketIncluded,
+        })) || [],
+      })),
+    };
 
-          activities: day.activities?.map((act) => ({
-            activityRef: act.activityRef, // only _id
-            activityTime: act.activityTime,
-            coverTitle: act.coverTitle,
-            customTitle: act.customTitle,
-            customDescription: act.customDescription,
-            guideIncluded: act.guideIncluded,
-            ticketIncluded: act.ticketIncluded,
-          })) || [],
-        })),
-      };
+    console.log("Sending:", formattedPackage);
 
-      console.log(formattedPackage)
+    const res = await fetch("/api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formattedPackage),
+    });
 
-      const res = await fetch("/api", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formattedPackage),
-      });
+    const result = await res.json();
 
-      const result = await res.json();
-
-      if (result.success) {
-        alert("Package saved ✅");
-        fetchPackages();
-        setPage("packages");
-      }
-    } catch (err) {
-      console.error(err);
+    if (result.success) {
+      alert("Package saved ✅");
+      fetchPackages();
+      setPage("packages");
+    } else {
+      alert(result.message);
     }
-  };
+
+  } catch (err) {
+    console.error(err);
+  }
+};
   const handleEdit = (data) => { setPackages(p => p.map(x => x.id === data.id ? data : x)); setPage("packages"); };
 
   return (
