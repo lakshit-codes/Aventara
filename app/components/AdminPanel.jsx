@@ -538,6 +538,23 @@ const MasterHotelsPage = () => {
   const { masterHotels, setMasterHotels, packages } = useStore();
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+  const fetchHotels = async () => {
+    try {
+      const res = await fetch("/api/hotels");
+      const result = await res.json();
+
+      if (result.success) {
+        setMasterHotels(result.data);
+      }
+    } catch (err) {
+      console.error("FETCH HOTEL ERROR:", err);
+    }
+  };
+
+  fetchHotels();
+}, []);
   const filtered = masterHotels.filter(h => !search || h.hotelName.toLowerCase().includes(search.toLowerCase()) || h.city.toLowerCase().includes(search.toLowerCase()));
 
   const usageCount = useMemo(() => {
@@ -584,11 +601,32 @@ const MasterHotelsPage = () => {
     console.error("HOTEL SAVE ERROR:", err);
   }
 };
-  const handleDelete = (id) => {
-    const count = usageCount[id] || 0;
-    if (window.confirm(count > 0 ? `Used in ${count} package(s). Continue?` : "Delete this hotel?"))
+  const handleDelete = async (id) => {
+  const count = usageCount[id] || 0;
+
+  if (!window.confirm(
+    count > 0 
+      ? `Used in ${count} package(s). Continue?` 
+      : "Delete this hotel?"
+  )) return;
+
+  try {
+    const res = await fetch("/api/hotels", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
       setMasterHotels(p => p.filter(h => h._id !== id));
-  };
+    }
+
+  } catch (err) {
+    console.error("DELETE HOTEL ERROR:", err);
+  }
+};
 
   return (
     <div className="space-y-5">

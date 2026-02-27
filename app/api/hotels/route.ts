@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
 }
 
 // GET ALL HOTELS
+
 export async function GET() {
   try {
     const db = await getDatabase();
@@ -39,7 +40,7 @@ export async function GET() {
 
     const normalized = hotels.map(h => ({
       ...h,
-      id: h._id.toString(),
+      _id: h._id.toString(),   // 👈 IMPORTANT CHANGE
     }));
 
     return NextResponse.json({ success: true, data: normalized });
@@ -49,6 +50,23 @@ export async function GET() {
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }
+// export async function GET() {
+//   try {
+//     const db = await getDatabase();
+//     const hotels = await db.collection("Hotels").find().toArray();
+
+//     const normalized = hotels.map(h => ({
+//       ...h,
+//       id: h._id.toString(),
+//     }));
+
+//     return NextResponse.json({ success: true, data: normalized });
+
+//   } catch (err) {
+//     console.error(err);
+//     return NextResponse.json({ success: false }, { status: 500 });
+//   }
+// }
 
 // UPDATE HOTEL
 export async function PUT(req: NextRequest) {
