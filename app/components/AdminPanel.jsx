@@ -403,16 +403,80 @@ const MasterActivitiesPage = () => {
     return map;
   }, [masterActivities, packages]);
 
-  const handleSave = (data) => {
-    if (modal.mode === "create") setMasterActivities(p => [...p, { ...data, _id: uid() }]);
-    else setMasterActivities(p => p.map(a => a._id === data._id ? data : a));
+  useEffect(() => {
+  const fetchActivities = async () => {
+    const res = await fetch("/api/activities");
+    const result = await res.json();
+
+    if (result.success) {
+      setMasterActivities(result.data);
+    }
+  };
+
+  fetchActivities();
+}, []);
+
+const handleSave = async (data) => {
+  try {
+
+    if (modal.mode === "create") {
+
+      const res = await fetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        const newActivity = { ...data, _id: result.insertedId };
+        setMasterActivities(p => [...p, newActivity]);
+      }
+
+    } else {
+
+      const res = await fetch("/api/activities", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setMasterActivities(p =>
+          p.map(a => a._id === data._id ? data : a)
+        );
+      }
+    }
+
     setModal(null);
-  };
-  const handleDelete = (id) => {
-    const count = usageCount[id] || 0;
-    if (window.confirm(count > 0 ? `Used in ${count} package(s). Deleting will unlink those references. Continue?` : "Delete this master activity?"))
-      setMasterActivities(p => p.filter(a => a._id !== id));
-  };
+
+  } catch (err) {
+    console.error("ACTIVITY SAVE ERROR:", err);
+  }
+};
+const handleDelete = async (id) => {
+  const count = usageCount[id] || 0;
+
+  if (!window.confirm(
+    count > 0
+      ? `Used in ${count} package(s). Continue?`
+      : "Delete this master activity?"
+  )) return;
+
+  try {
+    await fetch("/api/activities?id=" + id, {
+      method: "DELETE",
+    });
+
+    setMasterActivities(p => p.filter(a => a._id !== id));
+
+  } catch (err) {
+    console.error("DELETE ERROR:", err);
+  }
+};
 
   const typeCls = { meal: "text-amber-700 bg-amber-50 border-amber-200", sightseeing: "text-blue-700 bg-blue-50 border-blue-200", adventure: "text-emerald-700 bg-emerald-50 border-emerald-200", transfer: "text-orange-700 bg-orange-50 border-orange-200", leisure: "text-violet-700 bg-violet-50 border-violet-200", wellness: "text-pink-700 bg-pink-50 border-pink-200", shopping: "text-rose-700 bg-rose-50 border-rose-200" };
 
@@ -482,11 +546,44 @@ const MasterHotelsPage = () => {
     return map;
   }, [masterHotels, packages]);
 
-  const handleSave = (data) => {
-    if (modal.mode === "create") setMasterHotels(p => [...p, { ...data, _id: uid() }]);
-    else setMasterHotels(p => p.map(h => h._id === data._id ? data : h));
+  const handleSave = async (data) => {
+  try {
+    if (modal.mode === "create") {
+      const res = await fetch("/api/hotels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        const newHotel = { ...data, _id: result.insertedId };
+        setMasterHotels(p => [...p, newHotel]);
+      }
+
+    } else {
+      const res = await fetch("/api/hotels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        setMasterHotels(p =>
+          p.map(h => h._id === data._id ? data : h)
+        );
+      }
+    }
+
     setModal(null);
-  };
+
+  } catch (err) {
+    console.error("HOTEL SAVE ERROR:", err);
+  }
+};
   const handleDelete = (id) => {
     const count = usageCount[id] || 0;
     if (window.confirm(count > 0 ? `Used in ${count} package(s). Continue?` : "Delete this hotel?"))
@@ -785,7 +882,7 @@ const SummarisedView = ({ itinerary, pkg }) => {
                     </div>
                     <div className="space-y-4 ml-7">
                       {rActs.map((act, i) => (
-                        <div key={i} className="flex items-start gap-3">
+                        <div key={act.id || act.activityRef || `${act.title}-${act.time}-${i}`} className="flex items-start gap-3">
                           <span className="text-xs font-mono text-gray-400 w-14 flex-shrink-0 mt-0.5">{fmt12(act.time)}</span>
                           <div className={cls("w-2 h-2 rounded-full mt-1.5 flex-shrink-0", ACT_DOT[act.activityType] || "bg-gray-400")} />
                           <div className="flex-1 min-w-0">
@@ -828,8 +925,8 @@ const SummarisedView = ({ itinerary, pkg }) => {
                       <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Staying At ({rHotels.length})</span>
                     </div>
                     <div className="space-y-3 ml-7">
-                      {rHotels.map((h, i) => (
-                        <div key={i} className="rounded-xl border border-emerald-100 bg-emerald-50/30 overflow-hidden">
+                      {rHotels.map((h) => (
+                        <div key={h.id} className="rounded-xl border border-emerald-100 bg-emerald-50/30 overflow-hidden">
                           {/* Hotel image strip */}
                           {h.images?.length > 0 && (
                             <div className={cls("grid gap-1", h.images.length === 1 ? "grid-cols-1" : h.images.length === 2 ? "grid-cols-2" : "grid-cols-3")}>
@@ -2182,43 +2279,43 @@ const Topbar = ({ title, subtitle }) => (
 
 // ─── APP ROOT ─────────────────────────────────────────────────────
 export default function App() {
-  // const [formData, setFormData] = useState({
-  //   title: "",
-  //   destination: "",
-  //   duration: "",
-  //   price: 0,
-  //   currency: "INR",
-  //   travelStyle: "",
-  //   exclusivity: "",
-  //   shortDescription: "",
-  //   fullDescription: "",
-  //   itinerary: [],
-  //   inclusions: [],
-  //   exclusions: [],
-  //   faqs: [],
-  //   guidelines: [],
-  //   aboutDestination: "",
-  //   quickInfo: {},
-  //   experiencesCovered: [],
-  //   notToMiss: [],
-  // });
+  const [formData, setFormData] = useState({
+    title: "",
+    destination: "",
+    duration: "",
+    price: 0,
+    currency: "INR",
+    travelStyle: "",
+    exclusivity: "",
+    shortDescription: "",
+    fullDescription: "",
+    itinerary: [],
+    inclusions: [],
+    exclusions: [],
+    faqs: [],
+    guidelines: [],
+    aboutDestination: "",
+    quickInfo: {},
+    experiencesCovered: [],
+    notToMiss: [],
+  });
   const [page, setPage] = useState("dashboard");
   const [packages, setPackages] = useState(INIT_PACKAGES);
   const [masterActivities, setMasterActivities] = useState(INIT_ACTIVITIES);
   const [masterHotels, setMasterHotels] = useState(INIT_HOTELS);
   const [selectedId, setSelectedId] = useState(null);
   const fetchPackages = async () => {
-    try {
-      const res = await fetch("/api");
-      const result = await res.json();
+  try {
+    const res = await fetch("/api");
+    const result = await res.json();
 
-      if (result.success) {
-        setPackages(result.data);
-      }
-    } catch (err) {
-      console.error(err);
+    if (result.success) {
+      setPackages(result.data);   // backend already normalized
     }
-  };
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   useEffect(() => {
     fetchPackages();
@@ -2250,40 +2347,52 @@ export default function App() {
   //   const {name, value} = e.target
   // }
 
-const handleCreate = async (packageData) => {
+const handleCreate = async (data) => {
   try {
-    const formattedPackage = {
-      ...packageData,
 
-      itinerary: packageData.itinerary.map((day, index) => ({
+    const formattedPackage = {
+      ...data,
+
+      itinerary: data.itinerary.map((day, index) => ({
+        id: day.id,
         dayNumber: index + 1,
-        dayTitle: day.dayTitle,
+        title: day.title,
         city: day.city,
         dayType: day.dayType,
-        mealsIncluded: day.meals || {},
+        mealsIncluded: day.mealsIncluded || [],
+        notes: day.notes,
+        description: day.description,
 
-        hotelStays: day.hotelStays?.map((hotel) => ({
+        hotelStays: (day.hotelStays || []).map((hotel) => ({
+          id: hotel.id,
           hotelRef: hotel.hotelRef,
           roomType: hotel.roomType,
-          checkIn: hotel.checkIn,
-          checkOut: hotel.checkOut,
-          meals: hotel.meals,
+          checkInTime: hotel.checkInTime,
+          checkOutTime: hotel.checkOutTime,
+          mealInclusions: hotel.mealInclusions,
           notes: hotel.notes,
-        })) || [],
+        })),
 
-        activities: day.activities?.map((act) => ({
+        activities: (day.activities || []).map((act) => ({
+          id: act.id,
           activityRef: act.activityRef,
-          activityTime: act.activityTime,
+          time: act.time,
           coverTitle: act.coverTitle,
           customTitle: act.customTitle,
           customDescription: act.customDescription,
           guideIncluded: act.guideIncluded,
           ticketIncluded: act.ticketIncluded,
-        })) || [],
+        })),
+
+        transfers: (day.transfers || []).map((tr) => ({
+          id: tr.id,
+          pickupTime: tr.pickupTime,
+          from: tr.from,
+          to: tr.to,
+          vehicleType: tr.vehicleType,
+        })),
       })),
     };
-
-    console.log("Sending:", formattedPackage);
 
     const res = await fetch("/api", {
       method: "POST",
@@ -2297,15 +2406,35 @@ const handleCreate = async (packageData) => {
       alert("Package saved ✅");
       fetchPackages();
       setPage("packages");
-    } else {
-      alert(result.message);
     }
 
   } catch (err) {
     console.error(err);
   }
 };
-  const handleEdit = (data) => { setPackages(p => p.map(x => x.id === data.id ? data : x)); setPage("packages"); };
+ const handleEdit = async (data) => {
+  try {
+    const res = await fetch("/api", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    const result = await res.json();
+
+    if (result.success) {
+      alert("Package updated ✅");
+
+      // DB se fresh data lao
+      fetchPackages();
+
+      setPage("packages");
+    }
+
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   return (
     <StoreContext.Provider value={store}>
