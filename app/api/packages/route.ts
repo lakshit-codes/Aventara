@@ -93,31 +93,35 @@ export async function GET() {
       }
     }
 
-    // 🔥 IMPORTANT NORMALIZATION
-    const normalizedPackages = packages.map((pkg) => ({
-      ...pkg,
-      id: pkg._id.toString(),   // Convert Mongo _id to string id
+   // IMPORTANT NORMALIZATION
+const normalizedPackages = packages.map((pkg) => {
+  const { _id, ...rest } = pkg;
 
-      itinerary: (pkg.itinerary || []).map((day: any) => ({
-        ...day,
-        id: day.id || randomUUID(),
+  return {
+    id: _id.toString(), // Convert Mongo _id to string
+    ...rest,
 
-        hotelStays: (day.hotelStays || []).map((h: any) => ({
-          ...h,
-          id: h.id || randomUUID(),
-        })),
+    itinerary: (rest.itinerary || []).map((day: any) => ({
+      ...day,
+      id: day.id || randomUUID(),
 
-        activities: (day.activities || []).map((a: any) => ({
-          ...a,
-          id: a.id || randomUUID(),
-        })),
-
-        transfers: (day.transfers || []).map((t: any) => ({
-          ...t,
-          id: t.id || randomUUID(),
-        })),
+      hotelStays: (day.hotelStays || []).map((h: any) => ({
+        ...h,
+        id: h.id || randomUUID(),
       })),
-    }));
+
+      activities: (day.activities || []).map((a: any) => ({
+        ...a,
+        id: a.id || randomUUID(),
+      })),
+
+      transfers: (day.transfers || []).map((t: any) => ({
+        ...t,
+        id: t.id || randomUUID(),
+      })),
+    })),
+  };
+});
 
     return NextResponse.json(
       { success: true, data: normalizedPackages },
