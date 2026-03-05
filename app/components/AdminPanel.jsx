@@ -2318,25 +2318,27 @@ const Topbar = ({ title, subtitle }) => (
 // ─── APP ROOT ─────────────────────────────────────────────────────
 export default function App() {
   const [formData, setFormData] = useState({
-    title: "",
-    destination: "",
-    duration: "",
-    price: 0,
+  title: "",
+  destination: "",
+  duration: "",
+  price: {
     currency: "INR",
-    travelStyle: "",
-    exclusivity: "",
-    shortDescription: "",
-    fullDescription: "",
-    itinerary: [],
-    inclusions: [],
-    exclusions: [],
-    faqs: [],
-    guidelines: [],
-    aboutDestination: "",
-    quickInfo: {},
-    experiencesCovered: [],
-    notToMiss: [],
-  });
+    amount: ""
+  },
+  travelStyle: "",
+  exclusivity: "",
+  shortDescription: "",
+  fullDescription: "",
+  itinerary: [],
+  inclusions: [],
+  exclusions: [],
+  faqs: [],
+  guidelines: [],
+  aboutDestination: "",
+  quickInfo: {},
+  experiencesCovered: [],
+  notToMiss: [],
+});
   const [page, setPage] = useState("dashboard");
   const [packages, setPackages] = useState(INIT_PACKAGES);
   const [masterActivities, setMasterActivities] = useState(INIT_ACTIVITIES);
@@ -2344,7 +2346,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const fetchPackages = async () => {
   try {
-    const res = await fetch("/api");
+    const res = await fetch("/api/packages");
     const result = await res.json();
 
     if (result.success) {
@@ -2385,13 +2387,17 @@ export default function App() {
   //   const {name, value} = e.target
   // }
 
-const handleCreate = async (data) => {
+  const handleCreate = async (data) => {
   try {
+
+    if (!data.itinerary) {
+      data.itinerary = [];
+    }
 
     const formattedPackage = {
       ...data,
 
-      itinerary: data.itinerary.map((day, index) => ({
+      itinerary: (data.itinerary || []).map((day, index) => ({
         id: day.id,
         dayNumber: index + 1,
         title: day.title,
@@ -2432,7 +2438,7 @@ const handleCreate = async (data) => {
       })),
     };
 
-    const res = await fetch("/api", {
+    const res = await fetch("/api/packages", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formattedPackage),
@@ -2452,7 +2458,7 @@ const handleCreate = async (data) => {
 };
  const handleEdit = async (data) => {
   try {
-    const res = await fetch("/api", {
+    const res = await fetch("/api/packages", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDatabase } from "../utlis/getDatabase";
+import { getDatabase } from "../../utlis/getDatabase";
 import { ObjectId } from "mongodb";
 import { randomUUID } from "crypto";
 
@@ -10,12 +10,12 @@ export async function POST(req: NextRequest) {
 
     console.log(body)
 
-    if (!body.title || !body.itinerary) {
-      return NextResponse.json(
-        { message: "Invalid package data", success: false },
-        { status: 400 }
-      );
-    }
+    if (!body.title || !Array.isArray(body.itinerary)) {
+  return NextResponse.json(
+    { message: "Invalid package data", success: false },
+    { status: 400 }
+  );
+}
 
     const db = await getDatabase();
     const collection = db.collection("packages");
