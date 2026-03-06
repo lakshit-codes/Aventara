@@ -2458,20 +2458,24 @@ export default function App() {
 };
  const handleEdit = async (data) => {
   try {
+    console.log("EDIT DATA", data);
+
+    const formattedPackage = {
+      ...data,
+      id: selectedId,   // ✅ ensure id is always sent
+    };
+
     const res = await fetch("/api/packages", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(formattedPackage),
     });
 
     const result = await res.json();
 
     if (result.success) {
       alert("Package updated ✅");
-
-      // DB se fresh data lao
       fetchPackages();
-
       setPage("packages");
     }
 
