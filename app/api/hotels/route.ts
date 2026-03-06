@@ -91,3 +91,22 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }
+
+
+// DELETE HOTEL
+export async function DELETE(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const db = await getDatabase();
+
+    await db.collection("Hotels").deleteOne({
+      _id: new ObjectId(body.id),
+    });
+
+    return NextResponse.json({ success: true });
+
+  } catch (err) {
+    console.error("HOTEL DELETE ERROR:", err);
+    return NextResponse.json({ success: false }, { status: 500 });
+  }
+}

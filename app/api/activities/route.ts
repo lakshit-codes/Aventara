@@ -67,3 +67,23 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ success: false }, { status: 500 });
   }
 }
+
+// DELETE ACTIVITY
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    const db = await getDatabase();
+
+    await db.collection("Activities").deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    return NextResponse.json({ success: true });
+
+  } catch (err) {
+    console.error("ACTIVITY DELETE ERROR:", err);
+    return NextResponse.json({ success: false }, { status: 500 });
+  }
+}

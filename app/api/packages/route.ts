@@ -195,6 +195,41 @@ export async function PUT(req: NextRequest) {
   }
 }
 
+// DELETE PACKAGE
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json(
+        { message: "Package id is required", success: false },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDatabase();
+    const collection = db.collection("packages");
+
+    await collection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    return NextResponse.json(
+      { message: "Package deleted successfully", success: true },
+      { status: 200 }
+    );
+
+  } catch (err) {
+    console.error("DELETE ERROR:", err);
+
+    return NextResponse.json(
+      { message: "Server Error", success: false },
+      { status: 500 }
+    );
+  }
+}
+
 
 // export async function GET() {
 //   try {
