@@ -33,7 +33,7 @@ export async function GET() {
 
     const normalized = activities.map(a => ({
       ...a,
-      id: a._id.toString(),
+      _id: a._id.toString(),
     }));
 
     return NextResponse.json({ success: true, data: normalized });
@@ -51,7 +51,7 @@ export async function PUT(req: NextRequest) {
     const db = await getDatabase();
 
     await db.collection("Activities").updateOne(
-      { _id: new ObjectId(body.id) },
+      { _id: new ObjectId(body._id) },
       {
         $set: {
           ...body,
