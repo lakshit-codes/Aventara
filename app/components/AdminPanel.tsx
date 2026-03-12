@@ -7,8 +7,24 @@ import { useState, useMemo, useRef, createContext, useContext, useEffect } from 
 //   Summarised View · SaaS-level Architecture                      
 // ══════════════════════════════════════════════════════════════════
 
-const StoreContext = createContext(null);
-const useStore = () => useContext(StoreContext);
+export interface StoreContextType {
+  packages: Package[];
+  setPackages: React.Dispatch<React.SetStateAction<Package[]>>;
+  masterActivities: MasterActivity[];
+  setMasterActivities: React.Dispatch<React.SetStateAction<MasterActivity[]>>;
+  masterHotels: MasterHotel[];
+  setMasterHotels: React.Dispatch<React.SetStateAction<MasterHotel[]>>;
+  coupons: Coupon[];
+  setCoupons: React.Dispatch<React.SetStateAction<Coupon[]>>;
+}
+
+const StoreContext = createContext<StoreContextType | null>(null);
+
+const useStore = () => {
+  const context = useContext(StoreContext);
+  if (!context) throw new Error("useStore must be used within StoreContext.Provider");
+  return context;
+};
 
 // ─── UTILS ───────────────────────────────────────────────────────
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -74,19 +90,173 @@ const ACT_BADGE = {
   leisure: "bg-violet-50 text-violet-800", wellness: "bg-pink-50 text-pink-800", shopping: "bg-rose-50 text-rose-800",
 };
 
+// ─── INTERFACES ───────────────────────────────────────────────────
+export interface MasterActivity {
+  _id: string;
+  title: string;
+  description: string;
+  activityType: string;
+  defaultDuration: string;
+  location: string;
+  tags: string[];
+  images: string[];
+}
+
+export interface MasterHotel {
+  _id: string;
+  hotelName: string;
+  city: string;
+  starRating: string;
+  description: string;
+  roomTypes: string[];
+  amenities: string[];
+  images: string[];
+}
+
+export interface DayActivity {
+  id: string;
+  activityRef: string | null;
+  time: string;
+  customTitle: string;
+  customDescription: string;
+  customImages: string[];
+  guideIncluded: boolean;
+  ticketIncluded: boolean;
+  coverTitle: string;
+}
+
+export interface DayHotel {
+  id: string;
+  hotelRef: string | null;
+  customRoomType: string;
+  checkInTime: string;
+  checkOutTime: string;
+  customNotes: string;
+  customImages: string[];
+  mealInclusions: {
+    breakfast: boolean;
+    lunch: boolean;
+    dinner: boolean;
+  };
+}
+
+export interface Transfer {
+  id: string;
+  transferType: string;
+  vehicleType: string;
+  from: string;
+  to: string;
+  pickupTime: string;
+  dropTime: string;
+  notes: string;
+}
+
+export interface Faq {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface KBYG {
+  id: string;
+  point: string;
+}
+
+export interface ItineraryDay {
+  id: string;
+  dayNumber: number;
+  title: string;
+  city: string;
+  dayType: string;
+  mealsIncluded: string[];
+  notes: string;
+  description: string;
+  hotelStays: DayHotel[];
+  transfers: Transfer[];
+  activities: DayActivity[];
+}
+
+export interface Package {
+  id: string;
+  title: string;
+  destination: string;
+  tripDuration: string;
+  travelStyle: string;
+  tourType: string;
+  exclusivityLevel: string;
+  price: {
+    currency: string;
+    amount: number | string;
+  };
+  shortDescription: string;
+  availability: {
+    availableMonths: string[];
+    fixedDepartureDates: string[];
+    blackoutDates: string[];
+  };
+  inclusions: string[];
+  exclusions: string[];
+  knowBeforeYouGo: KBYG[];
+  additionalInfo: {
+    aboutDestination: string;
+    quickInfo: {
+      destinationsCovered: string;
+      duration: string;
+      startPoint: string;
+      endPoint: string;
+    };
+    experiencesCovered: string[];
+    notToMiss: string[];
+  };
+  faqs: Faq[];
+  itinerary: ItineraryDay[];
+  createdAt: string;
+}
+
+export interface Coupon {
+  _id: string;
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  description: string;
+  minOrderValue: number;
+  maxUses: number;
+  usedCount: number;
+  isActive: boolean;
+  expiryDate: string;
+}
+
+export interface Booking {
+  id: string;
+  packageId: string;
+  packageTitle: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
+  travelDate: string;
+  returnDate: string;
+  adults: number;
+  children: number;
+  totalPrice: number;
+  currency: string;
+  status: "pending" | "confirmed" | "cancelled";
+  notes: string;
+  createdAt: string;
+}
+
 // ─── FACTORIES ────────────────────────────────────────────────────
-const emptyMasterActivity = () => ({ _id: uid(), title: "", description: "", activityType: "sightseeing", defaultDuration: "1 hr", location: "", tags: [], images: [] });
-const emptyMasterHotel = () => ({ _id: uid(), hotelName: "", city: "", starRating: "5", description: "", roomTypes: [], amenities: [], images: [] });
-const emptyDayActivity = () => ({ id: uid(), activityRef: null, time: "09:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: false, ticketIncluded: false, coverTitle: "" });
-const emptyDayHotel = () => ({ id: uid(), hotelRef: null, customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: false, lunch: false, dinner: false } });
-const emptyTransfer = () => ({ id: uid(), transferType: "Private", vehicleType: "Sedan", from: "", to: "", pickupTime: "08:00", dropTime: "10:00", notes: "" });
-const emptyFaq = () => ({ id: uid(), question: "", answer: "" });
-const emptyKBYG = () => ({ id: uid(), point: "" });
+const emptyMasterActivity = (): MasterActivity => ({ _id: uid(), title: "", description: "", activityType: "sightseeing", defaultDuration: "1 hr", location: "", tags: [], images: [] });
+const emptyMasterHotel = (): MasterHotel => ({ _id: uid(), hotelName: "", city: "", starRating: "5", description: "", roomTypes: [], amenities: [], images: [] });
+const emptyDayActivity = (): DayActivity => ({ id: uid(), activityRef: null, time: "09:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: false, ticketIncluded: false, coverTitle: "" });
+const emptyDayHotel = (): DayHotel => ({ id: uid(), hotelRef: null, customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: false, lunch: false, dinner: false } });
+const emptyTransfer = (): Transfer => ({ id: uid(), transferType: "Private", vehicleType: "Sedan", from: "", to: "", pickupTime: "08:00", dropTime: "10:00", notes: "" });
+const emptyFaq = (): Faq => ({ id: uid(), question: "", answer: "" });
+const emptyKBYG = (): KBYG => ({ id: uid(), point: "" });
 const emptyAdditionalInfo = () => ({ aboutDestination: "", quickInfo: { destinationsCovered: "", duration: "", startPoint: "", endPoint: "" }, experiencesCovered: [], notToMiss: [] });
-const makeDay = (n) => ({ id: uid(), dayNumber: n, title: n === 1 ? "Arrival Day" : `Day ${n}`, city: "", dayType: n === 1 ? "arrival" : "sightseeing", mealsIncluded: [], notes: "", description: "", hotelStays: [], transfers: [], activities: [] });
+const makeDay = (n: number): ItineraryDay => ({ id: uid(), dayNumber: n, title: n === 1 ? "Arrival Day" : `Day ${n}`, city: "", dayType: n === 1 ? "arrival" : "sightseeing", mealsIncluded: [], notes: "", description: "", hotelStays: [], transfers: [], activities: [] });
 
 // ─── RESOLVE HELPERS (two-way sync merge) ─────────────────────────
-const resolveActivity = (dayAct, masters) => {
+const resolveActivity = (dayAct: DayActivity, masters: MasterActivity[]) => {
   const m = masters.find(x => x._id === dayAct.activityRef);
   return {
     ...m, ...dayAct,
@@ -98,7 +268,7 @@ const resolveActivity = (dayAct, masters) => {
     isLinked: !!m, masterTitle: m?.title,
   };
 };
-const resolveHotel = (dayHotel, masters) => {
+const resolveHotel = (dayHotel: DayHotel, masters: MasterHotel[]) => {
   const m = masters.find(x => x._id === dayHotel.hotelRef);
   return {
     ...m, ...dayHotel,
@@ -113,19 +283,19 @@ const resolveHotel = (dayHotel, masters) => {
 };
 
 // ─── MOCK DATA ────────────────────────────────────────────────────
-const INIT_ACTIVITIES = [
+const INIT_ACTIVITIES: MasterActivity[] = [
   { _id: "ma-001", title: "Amber Fort Guided Tour", description: "Explore the magnificent Amber Fort with a certified local guide. Includes elephant ride option.", activityType: "sightseeing", defaultDuration: "3 hrs", location: "Jaipur, Rajasthan", tags: ["Heritage", "UNESCO", "Fort"], images: [] },
   { _id: "ma-002", title: "Sunrise Yoga on Beach", description: "Rejuvenating beachfront yoga session with a certified instructor. All mats and props provided.", activityType: "wellness", defaultDuration: "1 hr", location: "Seminyak, Bali", tags: ["Wellness", "Beach", "Morning"], images: [] },
   { _id: "ma-003", title: "Kelingking Beach Viewpoint", description: "Iconic T-Rex cliff viewpoint visit with optional snorkeling. Breathtaking Pacific views.", activityType: "adventure", defaultDuration: "2 hrs", location: "Nusa Penida, Bali", tags: ["Beach", "Scenic", "Adventure"], images: [] },
   { _id: "ma-004", title: "Traditional Cooking Class", description: "Learn authentic local recipes from a master chef. Includes market visit and 3-course meal.", activityType: "meal", defaultDuration: "4 hrs", location: "Ubud, Bali", tags: ["Culinary", "Cultural", "Hands-on"], images: [] },
   { _id: "ma-005", title: "Desert Camel Safari", description: "Sunset camel safari across the Sam Sand Dunes with cultural camp dinner and folk performance.", activityType: "adventure", defaultDuration: "3 hrs", location: "Jaisalmer, Rajasthan", tags: ["Desert", "Safari", "Sunset"], images: [] },
 ];
-const INIT_HOTELS = [
+const INIT_HOTELS: MasterHotel[] = [
   { _id: "mh-001", hotelName: "The Layar Private Villas", city: "Seminyak, Bali", starRating: "5", description: "Iconic private pool villas with butler service and tropical gardens.", roomTypes: ["Private Pool Villa", "Garden Villa", "Royal Villa"], amenities: ["Swimming Pool", "Spa & Wellness", "Restaurant", "Butler Service", "Room Service"], images: [] },
   { _id: "mh-002", hotelName: "Rambagh Palace", city: "Jaipur, Rajasthan", starRating: "5", description: "Former residence of the Maharaja of Jaipur — legendary Taj property.", roomTypes: ["Deluxe Room", "Suite", "Signature Suite", "Royal Suite"], amenities: ["Swimming Pool", "Spa & Wellness", "Restaurant", "Bar/Lounge", "Butler Service", "Fitness Center"], images: [] },
   { _id: "mh-003", hotelName: "COMO Uma Ubud", city: "Ubud, Bali", starRating: "5", description: "Stunning hillside retreat above the Tjujungan River renowned for wellness.", roomTypes: ["Uma Suite", "Pool Villa", "Garden Terrace Suite"], amenities: ["Swimming Pool", "Spa & Wellness", "Restaurant", "Fitness Center", "Concierge"], images: [] },
 ];
-const INIT_PACKAGES = [
+const INIT_PACKAGES: Package[] = [
   {
     id: "pkg-001", title: "Bali Royal Escape", destination: "Bali, Indonesia",
     tripDuration: "5 Days / 4 Nights", travelStyle: "Luxury", tourType: "Relaxation",
@@ -153,13 +323,13 @@ const INIT_PACKAGES = [
     ],
     itinerary: [
       {
-        id: "d1", dayNumber: 1, title: "Arrival & Welcome", city: "Seminyak", dayType: "arrival", mealsIncluded: ["Dinner"], notes: "Private airport transfer included.",
+        id: "d1", dayNumber: 1, title: "Arrival & Welcome", city: "Seminyak", dayType: "arrival", mealsIncluded: ["Dinner"], notes: "Private airport transfer included.", description: "",
         hotelStays: [{ id: "dh1", hotelRef: "mh-001", customRoomType: "Private Pool Villa", checkInTime: "15:00", checkOutTime: "11:00", customNotes: "Welcome fruit basket.", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: true } }],
         transfers: [{ id: "dt1", transferType: "Private", vehicleType: "SUV", from: "Ngurah Rai Airport", to: "Seminyak", pickupTime: "14:00", dropTime: "15:00", notes: "Name board at arrivals." }],
         activities: [{ id: "da1", activityRef: "ma-002", time: "06:30", customTitle: "", customDescription: "", customImages: [], guideIncluded: true, ticketIncluded: false, coverTitle: "Start your day right" }]
       },
       {
-        id: "d2", dayNumber: 2, title: "Temples & Rice Terraces", city: "Ubud", dayType: "sightseeing", mealsIncluded: ["Breakfast", "Lunch"], notes: "Wear modest clothing.",
+        id: "d2", dayNumber: 2, title: "Temples & Rice Terraces", city: "Ubud", dayType: "sightseeing", mealsIncluded: ["Breakfast", "Lunch"], notes: "Wear modest clothing.", description: "",
         hotelStays: [{ id: "dh2", hotelRef: "mh-003", customRoomType: "Uma Suite", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: true, dinner: false } }],
         transfers: [{ id: "dt2", transferType: "Private", vehicleType: "Sedan", from: "Seminyak", to: "Ubud", pickupTime: "08:00", dropTime: "09:00", notes: "" }],
         activities: [
@@ -167,15 +337,15 @@ const INIT_PACKAGES = [
           { id: "da3", activityRef: "ma-004", time: "14:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: false, ticketIncluded: false, coverTitle: "" },
         ]
       },
-      { id: "d3", dayNumber: 3, title: "Beach Leisure", city: "Seminyak", dayType: "leisure", mealsIncluded: ["Breakfast"], notes: "", hotelStays: [{ id: "dh3", hotelRef: "mh-001", customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: false } }], transfers: [], activities: [] },
+      { id: "d3", dayNumber: 3, title: "Beach Leisure", city: "Seminyak", dayType: "leisure", mealsIncluded: ["Breakfast"], notes: "", description: "", hotelStays: [{ id: "dh3", hotelRef: "mh-001", customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: false } }], transfers: [], activities: [] },
       {
-        id: "d4", dayNumber: 4, title: "Island Adventure", city: "Nusa Penida", dayType: "sightseeing", mealsIncluded: ["Breakfast", "Lunch"], notes: "Speedboat at 7:30 AM.",
+        id: "d4", dayNumber: 4, title: "Island Adventure", city: "Nusa Penida", dayType: "sightseeing", mealsIncluded: ["Breakfast", "Lunch"], notes: "Speedboat at 7:30 AM.", description: "",
         hotelStays: [{ id: "dh4", hotelRef: "mh-001", customRoomType: "", checkInTime: "14:00", checkOutTime: "11:00", customNotes: "", customImages: [], mealInclusions: { breakfast: true, lunch: false, dinner: false } }],
         transfers: [{ id: "dt3", transferType: "Private", vehicleType: "Speedboat", from: "Sanur Beach", to: "Nusa Penida", pickupTime: "07:30", dropTime: "08:15", notes: "" }],
         activities: [{ id: "da4", activityRef: "ma-003", time: "09:00", customTitle: "", customDescription: "", customImages: [], guideIncluded: true, ticketIncluded: true, coverTitle: "Jaw-dropping vistas" }]
       },
       {
-        id: "d5", dayNumber: 5, title: "Departure", city: "Denpasar", dayType: "departure", mealsIncluded: ["Breakfast"], notes: "Check-out 11 AM.",
+        id: "d5", dayNumber: 5, title: "Departure", city: "Denpasar", dayType: "departure", mealsIncluded: ["Breakfast"], notes: "Check-out 11 AM.", description: "",
         hotelStays: [], transfers: [{ id: "dt4", transferType: "Private", vehicleType: "SUV", from: "Seminyak", to: "Airport", pickupTime: "12:30", dropTime: "13:15", notes: "" }], activities: []
       },
     ],
@@ -184,29 +354,35 @@ const INIT_PACKAGES = [
 ];
 
 // ─── BASE UI PRIMITIVES ───────────────────────────────────────────
-const Badge = ({ children, className = "" }) => (
+const Badge = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <span className={cls("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border", className)}>{children}</span>
 );
-const Inp = ({ className = "", ...p }) => (
+const Inp = ({ className = "", ...p }: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input className={cls("w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 placeholder:text-gray-400 transition-all", className)} {...p} />
 );
-const TA = ({ className = "", rows = 3, ...p }) => (
+const TA = ({ className = "", rows = 3, ...p }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
   <textarea rows={rows} className={cls("w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 placeholder:text-gray-400 transition-all resize-none", className)} {...p} />
 );
-const Sel = ({ options, placeholder, value, onChange, className = "" }) => (
+const Sel = ({ options, placeholder, value, onChange, className = "" }: { options: string[]; placeholder?: string; value?: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; className?: string }) => (
   <select value={value || ""} onChange={onChange}
     className={cls("w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900 transition-all cursor-pointer", !value ? "text-gray-400" : "text-gray-900", className)}>
     {placeholder && <option value="" disabled>{placeholder}</option>}
     {options.map(o => <option key={o} value={o}>{o}</option>)}
   </select>
 );
-const Card = ({ children, className = "" }) => <div className={cls("bg-white rounded-xl border border-gray-100 shadow-sm", className)}>{children}</div>;
-const FL = ({ children, required, optional }) => (
-  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+const Card = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => <div className={cls("bg-white rounded-xl border border-gray-100 shadow-sm", className)}>{children}</div>;
+const FL = ({ children, required, optional, className }: { children: React.ReactNode; required?: boolean; optional?: boolean; className?: string }) => (
+  <label className={cls("block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5", className)}>
     {children}{required && <span className="text-red-500 ml-0.5">*</span>}{optional && <span className="ml-1 text-gray-400 font-normal normal-case">(optional)</span>}
   </label>
 );
-const Btn = ({ variant = "primary", size = "md", className = "", children, ...p }) => {
+
+interface BtnProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: "primary" | "secondary" | "success" | "danger" | "ghost" | "outline" | "soft" | "dashed" | "d-em" | "d-am";
+  size?: "xs" | "sm" | "md" | "lg";
+}
+
+const Btn = ({ variant = "primary", size = "md", className = "", children, ...p }: BtnProps) => {
   const sz = { xs: "px-2 py-1 text-xs", sm: "px-3 py-1.5 text-xs", md: "px-4 py-2 text-sm", lg: "px-6 py-2.5 text-sm" };
   const va = {
     primary: "bg-blue-950 text-white hover:bg-blue-900 shadow-sm",
@@ -222,7 +398,16 @@ const Btn = ({ variant = "primary", size = "md", className = "", children, ...p 
   };
   return <button className={cls("inline-flex items-center justify-center font-semibold rounded-lg transition-all focus:outline-none disabled:opacity-50 gap-1.5 whitespace-nowrap", sz[size], va[variant], className)} {...p}>{children}</button>;
 };
-const Modal = ({ open, onClose, title, children, wide = false }) => {
+
+interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+  wide?: boolean;
+}
+
+const Modal = ({ open, onClose, title, children, wide = false }: ModalProps) => {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -264,15 +449,23 @@ const Ic = {
   Check: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>,
   X: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>,
   Tag: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg>,
+  Booking: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>,
 };
 
 // ─── IMAGE UPLOADER ───────────────────────────────────────────────
-const ImageUploader = ({ images = [], onAdd, onRemove, label = "Images" }) => {
+interface ImageUploaderProps {
+  images?: string[];
+  onAdd: (url: string) => void;
+  onRemove: (index: number) => void;
+  label?: string;
+}
 
-  const ref = useRef(null);
+const ImageUploader = ({ images = [], onAdd, onRemove, label = "Images" }: ImageUploaderProps) => {
 
-  const handleFiles = async (e) => {
-    const files = Array.from(e.target.files || []);
+  const ref = useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []) as File[];
 
     for (const file of files) {
 
@@ -357,6 +550,11 @@ const ImageUploader = ({ images = [], onAdd, onRemove, label = "Images" }) => {
 const MasterActivityForm = ({ initial, onSave, onClose }) => {
   const [form, setForm] = useState(initial || emptyMasterActivity());
   const [tagIn, setTagIn] = useState("");
+
+  useEffect(() => {
+    setForm(initial || emptyMasterActivity());
+  }, [initial]);
+
   const upd = (f, v) => setForm(p => ({ ...p, [f]: v }));
   return (
     <div className="p-6 space-y-4">
@@ -393,6 +591,11 @@ const MasterActivityForm = ({ initial, onSave, onClose }) => {
 // ─── MASTER HOTEL FORM ────────────────────────────────────────────
 const MasterHotelForm = ({ initial, onSave, onClose }) => {
   const [form, setForm] = useState(initial || emptyMasterHotel());
+
+  useEffect(() => {
+    setForm(initial || emptyMasterHotel());
+  }, [initial]);
+
   const upd = (f, v) => setForm(p => ({ ...p, [f]: v }));
   return (
     <div className="p-6 space-y-4">
@@ -446,7 +649,7 @@ const MasterHotelForm = ({ initial, onSave, onClose }) => {
 // ─── MASTER ACTIVITIES PAGE ───────────────────────────────────────
 const MasterActivitiesPage = () => {
   const { masterActivities, setMasterActivities, packages } = useStore();
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; data: MasterActivity | null } | null>(null);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
 
@@ -456,87 +659,84 @@ const MasterActivitiesPage = () => {
   });
 
   const usageCount = useMemo(() => {
-    const map = {}; masterActivities.forEach(a => { map[a._id] = 0; });
-    packages.forEach(pkg => pkg.itinerary.forEach(day => day.activities.forEach(act => { if (act.activityRef && map[act.activityRef] !== undefined) map[act.activityRef]++; })));
+    const map: Record<string, number> = {};
+    masterActivities.forEach(a => { map[a._id] = 0; });
+    packages.forEach(pkg => pkg.itinerary?.forEach(day => day.activities?.forEach(act => {
+      if (act.activityRef && map[act.activityRef] !== undefined) map[act.activityRef]++;
+    })));
     return map;
   }, [masterActivities, packages]);
 
   useEffect(() => {
-  const fetchActivities = async () => {
-    const res = await fetch("/api/activities");
-    const result = await res.json();
+    const fetchActivities = async () => {
+      const res = await fetch("/api/activities");
+      const result = await res.json();
 
-    if (result.success) {
-      setMasterActivities(result.data);
+      if (result.success) {
+        setMasterActivities(result.data);
+      }
+    };
+
+    fetchActivities();
+  }, [setMasterActivities]);
+
+  const handleSave = async (data: MasterActivity) => {
+    try {
+      if (modal?.mode === "create") {
+        const res = await fetch("/api/activities", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (result.success) {
+          const newActivity = { ...data, _id: result.insertedId };
+          setMasterActivities(p => [...p, newActivity]);
+        }
+      } else {
+        const res = await fetch("/api/activities", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const result = await res.json();
+        if (result.success) {
+          setMasterActivities(p =>
+            p.map(a => a._id === data._id ? data : a)
+          );
+        }
+      }
+      setModal(null);
+    } catch (err) {
+      console.error("ACTIVITY SAVE ERROR:", err);
     }
   };
 
-  fetchActivities();
-}, []);
+  const handleDelete = async (id: string) => {
+    const count = usageCount[id] || 0;
 
-const handleSave = async (data) => {
-  try {
+    if (!window.confirm(
+      count > 0
+        ? `Used in ${count} package(s). Continue?`
+        : "Delete this master activity?"
+    )) return;
 
-    if (modal.mode === "create") {
-
-      const res = await fetch("/api/activities", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
+    try {
+      const res = await fetch("/api/activities?id=" + id, { method: "DELETE" });
       const result = await res.json();
-
+      
       if (result.success) {
-        const newActivity = { ...data, _id: result.insertedId };
-        setMasterActivities(p => [...p, newActivity]);
+        setMasterActivities(p => p.filter(a => a._id !== id));
+      } else {
+        alert("Delete failed: " + (result.message || "Unknown error"));
       }
-
-    } else {
-
-      const res = await fetch("/api/activities", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      const result = await res.json();
-
-      if (result.success) {
-        setMasterActivities(p =>
-          p.map(a => a._id === data._id ? data : a)
-        );
-      }
+    } catch (err) {
+      console.error("DELETE ERROR:", err);
+      alert("Network error. Delete failed.");
     }
+  };
 
-    setModal(null);
-
-  } catch (err) {
-    console.error("ACTIVITY SAVE ERROR:", err);
-  }
-};
-const handleDelete = async (id) => {
-  const count = usageCount[id] || 0;
-
-  if (!window.confirm(
-    count > 0
-      ? `Used in ${count} package(s). Continue?`
-      : "Delete this master activity?"
-  )) return;
-
-  try {
-    await fetch("/api/activities?id=" + id, {
-      method: "DELETE",
-    });
-
-    setMasterActivities(p => p.filter(a => a._id !== id));
-
-  } catch (err) {
-    console.error("DELETE ERROR:", err);
-  }
-};
-
-  const typeCls = { meal: "text-amber-700 bg-amber-50 border-amber-200", sightseeing: "text-blue-700 bg-blue-50 border-blue-200", adventure: "text-emerald-700 bg-emerald-50 border-emerald-200", transfer: "text-orange-700 bg-orange-50 border-orange-200", leisure: "text-violet-700 bg-violet-50 border-violet-200", wellness: "text-pink-700 bg-pink-50 border-pink-200", shopping: "text-rose-700 bg-rose-50 border-rose-200" };
+  const typeCls: Record<string, string> = { meal: "text-amber-700 bg-amber-50 border-amber-200", sightseeing: "text-blue-700 bg-blue-50 border-blue-200", adventure: "text-emerald-700 bg-emerald-50 border-emerald-200", transfer: "text-orange-700 bg-orange-50 border-orange-200", leisure: "text-violet-700 bg-violet-50 border-violet-200", wellness: "text-pink-700 bg-pink-50 border-pink-200", shopping: "text-rose-700 bg-rose-50 border-rose-200" };
 
   return (
     <div className="space-y-5">
@@ -561,7 +761,7 @@ const handleDelete = async (id) => {
             <Card key={act._id} className="p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className={cls("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-sm", ACT_BADGE[act.activityType])}><Ic.Activity /></div>
+                  <div className={cls("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-sm", ACT_BADGE[act.activityType as keyof typeof ACT_BADGE])}><Ic.Activity /></div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-bold text-gray-900">{act.title}</h3>
@@ -583,7 +783,7 @@ const handleDelete = async (id) => {
           );
         })}
       </div>
-      <p className="text-xs text-gray-400 text-center">{masterActivities.length} master activities · {Object.values(usageCount).reduce((a, b) => a + b, 0)} total usages</p>
+      <p className="text-xs text-gray-400 text-center">{masterActivities.length} master activities · {Object.values(usageCount).reduce((a, b) => Number(a) + Number(b), 0)} total usages</p>
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.mode === "create" ? "Create Master Activity" : "Edit Master Activity"}>
         <MasterActivityForm initial={modal?.data} onSave={handleSave} onClose={() => setModal(null)} />
       </Modal>
@@ -591,100 +791,101 @@ const handleDelete = async (id) => {
   );
 };
 
+
 // ─── MASTER HOTELS PAGE ───────────────────────────────────────────
 const MasterHotelsPage = () => {
   const { masterHotels, setMasterHotels, packages } = useStore();
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; data: MasterHotel | null } | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-  const fetchHotels = async () => {
-    try {
-      const res = await fetch("/api/hotels");
-      const result = await res.json();
+    const fetchHotels = async () => {
+      try {
+        const res = await fetch("/api/hotels");
+        const result = await res.json();
 
-      if (result.success) {
-        setMasterHotels(result.data);
+        if (result.success) {
+          setMasterHotels(result.data);
+        }
+      } catch (err) {
+        console.error("FETCH HOTEL ERROR:", err);
       }
-    } catch (err) {
-      console.error("FETCH HOTEL ERROR:", err);
-    }
-  };
+    };
 
-  fetchHotels();
-}, []);
-  const filtered = masterHotels.filter(h => !search || h.hotelName.toLowerCase().includes(search.toLowerCase()) || h.city.toLowerCase().includes(search.toLowerCase()));
+    fetchHotels();
+  }, [setMasterHotels]);
+
+  const filtered = masterHotels.filter(h => !search || h.hotelName.toLowerCase().includes(search.toLowerCase()) || (h.city && h.city.toLowerCase().includes(search.toLowerCase())));
 
   const usageCount = useMemo(() => {
-    const map = {}; masterHotels.forEach(h => { map[h._id] = 0; });
-    packages.forEach(pkg => pkg.itinerary.forEach(day => day.hotelStays.forEach(hs => { if (hs.hotelRef && map[hs.hotelRef] !== undefined) map[hs.hotelRef]++; })));
+    const map: Record<string, number> = {};
+    masterHotels.forEach(h => { map[h._id] = 0; });
+    packages.forEach(pkg => pkg.itinerary?.forEach(day => day.hotelStays?.forEach(hs => {
+      if (hs.hotelRef && map[hs.hotelRef] !== undefined) map[hs.hotelRef]++;
+    })));
     return map;
   }, [masterHotels, packages]);
 
-  const handleSave = async (data) => {
-  try {
-    if (modal.mode === "create") {
-      const res = await fetch("/api/hotels", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+  const handleSave = async (data: MasterHotel) => {
+    try {
+      if (modal?.mode === "create") {
+        const res = await fetch("/api/hotels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
 
+        const result = await res.json();
+
+        if (result.success) {
+          const newHotel = { ...data, _id: result.insertedId };
+          setMasterHotels(p => [...p, newHotel]);
+        }
+
+      } else {
+        const res = await fetch("/api/hotels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+          setMasterHotels(p => p.map(h => h._id === data._id ? data : h));
+        }
+      }
+
+      setModal(null);
+
+    } catch (err) {
+      console.error("HOTEL SAVE ERROR:", err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const count = usageCount[id] || 0;
+
+    if (!window.confirm(
+      count > 0 
+        ? `Used in ${count} package(s). Continue?` 
+        : "Delete this hotel?"
+    )) return;
+
+    try {
+      const res = await fetch("/api/hotels?id=" + id, { method: "DELETE" });
       const result = await res.json();
 
       if (result.success) {
-        const newHotel = { ...data, _id: result.insertedId };
-        setMasterHotels(p => [...p, newHotel]);
+        setMasterHotels(p => p.filter(h => h._id !== id));
+      } else {
+        alert("Delete failed: " + (result.message || "Unknown error"));
       }
-
-    } else {
-      const res = await fetch("/api/hotels", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      const result = await res.json();
-
-      if (result.success) {
-        setMasterHotels(p =>
-          p.map(h => h._id === data._id ? data : h)
-        );
-      }
+    } catch (err) {
+      console.error("DELETE HOTEL ERROR:", err);
+      alert("Network error. Delete failed.");
     }
-
-    setModal(null);
-
-  } catch (err) {
-    console.error("HOTEL SAVE ERROR:", err);
-  }
-};
-  const handleDelete = async (id) => {
-  const count = usageCount[id] || 0;
-
-  if (!window.confirm(
-    count > 0 
-      ? `Used in ${count} package(s). Continue?` 
-      : "Delete this hotel?"
-  )) return;
-
-  try {
-    const res = await fetch("/api/hotels", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-
-    const result = await res.json();
-
-    if (result.success) {
-      setMasterHotels(p => p.filter(h => h._id !== id));
-    }
-
-  } catch (err) {
-    console.error("DELETE HOTEL ERROR:", err);
-  }
-};
+  };
 
   return (
     <div className="space-y-5">
@@ -711,7 +912,7 @@ const MasterHotelsPage = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-bold text-gray-900">{hotel.hotelName}</h3>
-                      <div className="flex">{Array.from({ length: Number(hotel.starRating) }).map((_, i) => <Ic.Star key={i} />)}</div>
+                      <div className="flex">{Array.from({ length: Number(hotel.starRating) || 0 }).map((_, i) => <Ic.Star key={i} />)}</div>
                       {usage > 0 && <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-semibold"><Ic.Link />Used in {usage} pkg</span>}
                     </div>
                     <p className="text-xs text-gray-500 flex items-center gap-1 mt-1"><Ic.MapPin />{hotel.city}</p>
@@ -1170,7 +1371,7 @@ const ItineraryBuilder = ({ itinerary, setItinerary }) => {
                     <div className="flex items-center gap-3 h-9">
                       {OPTIONS.mealsOptions.map(m => (
                         <label key={m} className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-600 font-medium">
-                          <input type="checkbox" className="w-3.5 h-3.5 rounded accent-blue-900" checked={day.mealsIncluded.includes(m)} onChange={e => updateDay(day.id, "mealsIncluded", e.target.checked ? [...day.mealsIncluded, m] : day.mealsIncluded.filter(x => x !== m))} />{m}
+                          <input type="checkbox" className="w-3.5 h-3.5 rounded accent-blue-900" checked={(Array.isArray(day.mealsIncluded) ? day.mealsIncluded : []).includes(m)} onChange={e => updateDay(day.id, "mealsIncluded", e.target.checked ? [...(Array.isArray(day.mealsIncluded) ? day.mealsIncluded : []), m] : (Array.isArray(day.mealsIncluded) ? day.mealsIncluded : []).filter((x: string) => x !== m))} />{m}
                         </label>
                       ))}
                     </div>
@@ -1261,7 +1462,7 @@ const EditableListItem = ({ value, onBlur, onRemove, icon, rowCls, iconCls }) =>
   const [local, setLocal] = useState(value);
   // sync if parent pushes a new value (e.g. after delete re-index)
   const prevRef = useRef(value);
-  if (prevRef.current !== value && document.activeElement?.dataset?.itemid !== String(value)) {
+  if (prevRef.current !== value && (document.activeElement as HTMLElement)?.dataset?.itemid !== String(value)) {
     prevRef.current = value;
     setLocal(value);
   }
@@ -1886,8 +2087,11 @@ const PackageForm = ({ initial, onSave, onCancel, mode }) => {
             </div>
           </div>
           <div className="flex gap-0">
-            {[["builder", <><Ic.Package /> Builder</>], ["summary", <><Ic.Summary /> Summarised View</>]].map(([key, label]) => (
-              <button key={key} onClick={() => setTab(key)}
+            {([] as [string, React.ReactNode][]).concat([
+              ["builder", <><Ic.Package /> Builder</>],
+              ["summary", <><Ic.Summary /> Summarised View</>]
+            ]).map(([key, label]) => (
+              <button key={key} onClick={() => setTab(key as any)}
                 className={cls("flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all", tab === key ? "border-blue-950 text-blue-950 bg-white" : "border-transparent text-gray-500 hover:text-gray-700")}>
                 {label}
               </button>
@@ -2137,11 +2341,165 @@ const ViewPackage = ({ pkg, onEdit }) => {
   );
 };
 
+// ─── COUPONS PAGE ────────────────────────────────────────────────
+interface CouponFormData {
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number | string;
+  description: string;
+  minOrderValue: number | string;
+  maxUses: number | string;
+  isActive: boolean;
+  expiryDate: string;
+}
+
+const emptyCouponForm = (): CouponFormData => ({
+  code: "", discountType: "percentage", discountValue: "", description: "",
+  minOrderValue: "", maxUses: "", isActive: true, expiryDate: "",
+});
+
+const CouponsPage = () => {
+  const { coupons, setCoupons } = useStore();
+  const [modal, setModal] = useState<{ mode: "create" | "edit"; data: Coupon | null } | null>(null);
+  const [form, setForm] = useState<CouponFormData>(emptyCouponForm());
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    fetch("/api/coupons").then(r => r.json())
+      .then(res => { if (res.success) setCoupons(res.data); })
+      .catch(console.error);
+  }, [setCoupons]);
+
+  const filtered = coupons.filter(c =>
+    !search || c.code.toLowerCase().includes(search.toLowerCase()) ||
+    c.description?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setForm(emptyCouponForm()); setModal({ mode: "create", data: null }); };
+  const openEdit = (c: Coupon) => {
+    setForm({ code: c.code, discountType: c.discountType, discountValue: c.discountValue, description: c.description || "", minOrderValue: c.minOrderValue || "", maxUses: c.maxUses || "", isActive: c.isActive, expiryDate: c.expiryDate || "" });
+    setModal({ mode: "edit", data: c });
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const upd = (f: keyof CouponFormData, v: any) => setForm(p => ({ ...p, [f]: v }));
+
+  const handleSave = async () => {
+    if (!form.code.trim()) { alert("Coupon code is required"); return; }
+    try {
+      const payload = { ...form, discountValue: Number(form.discountValue) || 0, minOrderValue: Number(form.minOrderValue) || 0, maxUses: Number(form.maxUses) || 0 };
+      if (modal?.mode === "create") {
+        const res = await fetch("/api/coupons", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const result = await res.json();
+        if (result.success) { setCoupons(p => [...p, { ...payload, _id: result.insertedId, usedCount: 0 }]); setModal(null); }
+      } else if (modal?.data) {
+        const full = { ...modal.data, ...payload };
+        const res = await fetch("/api/coupons", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(full) });
+        const result = await res.json();
+        if (result.success) { setCoupons(p => p.map(c => c._id === modal.data!._id ? full : c)); setModal(null); }
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Delete this coupon?")) return;
+    try {
+      const res = await fetch("/api/coupons?id=" + id, { method: "DELETE" });
+      const result = await res.json();
+      if (result.success) {
+        setCoupons(p => p.filter(c => c._id !== id));
+      } else {
+        alert("Delete failed: " + (result.message || "Unknown error"));
+      }
+    } catch (err) { 
+      console.error(err); 
+      alert("Network error. Delete failed.");
+    }
+  };
+
+  const getStatus = (c: Coupon) => {
+    if (!c.isActive) return { label: "Inactive", cls: "bg-gray-100 text-gray-500 border-gray-200" };
+    if (c.expiryDate && new Date(c.expiryDate) < new Date()) return { label: "Expired", cls: "bg-red-50 text-red-600 border-red-200" };
+    return { label: "Active", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm"><div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Ic.Search /></div><Inp className="pl-9" placeholder="Search coupons…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <Btn className="ml-auto" onClick={openCreate}><Ic.Plus />New Coupon</Btn>
+      </div>
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-gray-100 bg-gray-50/80">
+              {["Code", "Discount", "Description", "Min Order", "Uses", "Expiry", "Status", "Actions"].map(h => (
+                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+              ))}
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.length === 0 && <tr><td colSpan={8} className="text-center py-12 text-gray-400 text-sm">No coupons yet. Click "New Coupon" to add one.</td></tr>}
+              {filtered.map(c => {
+                const st = getStatus(c);
+                return (
+                  <tr key={c._id} className="hover:bg-blue-50/20 transition-colors">
+                    <td className="px-4 py-3.5"><span className="font-mono font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg text-xs tracking-widest">{c.code}</span></td>
+                    <td className="px-4 py-3.5"><span className="font-bold text-gray-900">{c.discountType === "percentage" ? `${c.discountValue}%` : `₹${c.discountValue}`}</span><span className="ml-1.5 text-xs text-gray-400 capitalize">{c.discountType}</span></td>
+                    <td className="px-4 py-3.5 text-xs text-gray-500 max-w-[160px] truncate">{c.description || "—"}</td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600">{c.minOrderValue ? `₹${c.minOrderValue}` : "—"}</td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600"><span className="font-semibold">{c.usedCount || 0}</span>{c.maxUses ? <span className="text-gray-400"> / {c.maxUses}</span> : <span className="text-gray-400"> / ∞</span>}</td>
+                    <td className="px-4 py-3.5 text-xs text-gray-600">{c.expiryDate ? new Date(c.expiryDate).toLocaleDateString("en-IN") : "No expiry"}</td>
+                    <td className="px-4 py-3.5"><Badge className={st.cls}>{st.label}</Badge></td>
+                    <td className="px-4 py-3.5"><div className="flex items-center gap-0.5">
+                      <button onClick={() => openEdit(c)} className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg"><Ic.Edit /></button>
+                      <button onClick={() => handleDelete(c._id)} className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg"><Ic.Trash /></button>
+                    </div></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/60 rounded-b-xl">
+          <p className="text-xs text-gray-500">{filtered.length} of {coupons.length} coupons · {coupons.filter(c => c.isActive).length} active</p>
+        </div>
+      </Card>
+      <Modal open={!!modal} onClose={() => setModal(null)} title={modal?.mode === "create" ? "New Coupon" : "Edit Coupon"}>
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2"><FL required>Coupon Code</FL><Inp placeholder="e.g. SUMMER20" value={form.code} onChange={e => upd("code", e.target.value.toUpperCase())} className="font-mono tracking-widest uppercase" /></div>
+            <div><FL required>Discount Type</FL><Sel options={["percentage", "fixed"]} value={form.discountType} onChange={e => upd("discountType", e.target.value)} /></div>
+            <div><FL required>Value</FL>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-bold select-none">{form.discountType === "percentage" ? "%" : "₹"}</span>
+                <Inp type="number" placeholder="0" value={String(form.discountValue)} onChange={e => upd("discountValue", e.target.value)} className="pl-8" />
+              </div>
+            </div>
+            <div><FL optional>Min Order (₹)</FL><Inp type="number" placeholder="e.g. 5000" value={String(form.minOrderValue)} onChange={e => upd("minOrderValue", e.target.value)} /></div>
+            <div><FL optional>Max Uses</FL><Inp type="number" placeholder="Unlimited if blank" value={String(form.maxUses)} onChange={e => upd("maxUses", e.target.value)} /></div>
+            <div><FL optional>Expiry Date</FL><Inp type="date" value={form.expiryDate} onChange={e => upd("expiryDate", e.target.value)} /></div>
+            <div className="flex items-center gap-2 pt-6">
+              <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 font-medium"><input type="checkbox" className="w-4 h-4 rounded accent-blue-900" checked={form.isActive} onChange={e => upd("isActive", e.target.checked)} />Active</label>
+            </div>
+            <div className="col-span-2"><FL optional>Description</FL><TA placeholder="e.g. 20% off on all summer packages" value={form.description} onChange={e => upd("description", e.target.value)} rows={2} /></div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+            <Btn variant="outline" onClick={() => setModal(null)}>Cancel</Btn>
+            <Btn variant="success" onClick={handleSave}>{modal?.mode === "create" ? "Create Coupon" : "Save Changes"}</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+};
+
 // ─── PACKAGES LISTING ─────────────────────────────────────────────
 const PackagesListing = ({ setPage, setSelectedId }) => {
   const { packages, setPackages } = useStore();
   const [search, setSearch] = useState("");
+  const [bookingModal, setBookingModal] = useState<Package | null>(null);
+  
   const filtered = packages.filter(p => !search || p.title?.toLowerCase().includes(search.toLowerCase()) || p.destination?.toLowerCase().includes(search.toLowerCase()));
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
@@ -2160,13 +2518,13 @@ const PackagesListing = ({ setPage, setSelectedId }) => {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filtered.length === 0 && <tr><td colSpan={7} className="text-center py-12 text-gray-400 text-sm">No packages found</td></tr>}
-              {filtered.map(pkg => {
+              {filtered.map((pkg, index) => {
                 const totalH = pkg.itinerary?.reduce((s, d) => s + (d.hotelStays?.length || 0), 0) || 0;
                 const totalA = pkg.itinerary?.reduce((s, d) => s + (d.activities?.length || 0), 0) || 0;
                 const totalT = pkg.itinerary?.reduce((s, d) => s + (d.transfers?.length || 0), 0) || 0;
                 const linked = pkg.itinerary?.reduce((s, d) => s + d.activities.filter(a => a.activityRef).length + d.hotelStays.filter(h => h.hotelRef).length, 0) || 0;
                 return (
-                  <tr key={pkg.id} className="hover:bg-blue-50/20 transition-colors">
+                  <tr key={`${pkg.id}-${index}`} className="hover:bg-blue-50/20 transition-colors">
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-900 flex-shrink-0"><Ic.Globe /></div>
@@ -2195,9 +2553,10 @@ const PackagesListing = ({ setPage, setSelectedId }) => {
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-0.5">
-                        <button onClick={() => { setSelectedId(pkg.id); setPage("view"); }} className="p-1.5 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors"><Ic.Eye /></button>
-                        <button onClick={() => { setSelectedId(pkg.id); setPage("edit"); }} className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors"><Ic.Edit /></button>
-                        <button onClick={() => { if (window.confirm("Delete this package?")) setPackages(p => p.filter(x => x.id !== pkg.id)); }} className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Ic.Trash /></button>
+                        <button onClick={() => { setSelectedId(pkg.id); setPage("view"); }} className="p-1.5 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors" title="View"><Ic.Eye /></button>
+                        <button onClick={() => { setSelectedId(pkg.id); setPage("edit"); }} className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors" title="Edit"><Ic.Edit /></button>
+                        <button onClick={async () => { if (!window.confirm("Delete this package?")) return; try { const res = await fetch("/api/packages?id=" + pkg.id, { method: "DELETE" }); const result = await res.json(); if (result.success) setPackages(p => p.filter(x => x.id !== pkg.id)); else alert("Delete failed: " + (result.message || "Unknown error")); } catch { alert("Network error. Delete failed."); } }} className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg transition-colors" title="Delete"><Ic.Trash /></button>
+                        <button onClick={() => setBookingModal(pkg)} className="ml-2 px-2.5 py-1 text-xs font-bold text-white bg-blue-900 hover:bg-blue-800 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"><Ic.Plus />Book</button>
                       </div>
                     </td>
                   </tr>
@@ -2210,9 +2569,119 @@ const PackagesListing = ({ setPage, setSelectedId }) => {
           <p className="text-xs text-gray-500">{filtered.length} of {packages.length} packages</p>
         </div>
       </Card>
+
+      {/* New Booking Modal */}
+      {bookingModal && (
+        <BookingFormModal pkg={bookingModal} onClose={() => setBookingModal(null)} />
+      )}
     </div>
   );
 };
+
+const BookingFormModal = ({ pkg, onClose }: { pkg: Package; onClose: () => void }) => {
+  const [form, setForm] = useState({
+    userName: "",
+    userEmail: "",
+    userPhone: "",
+    travelDate: "",
+    returnDate: "",
+    adults: 2,
+    children: 0,
+    notes: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Compute estimated price automatically
+  const basePrice = Number(pkg.price?.amount || 0);
+  const totalGuests = Number(form.adults) + (Number(form.children) * 0.5); // Example: kids are half price
+  const estimatedTotal = basePrice * totalGuests;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.userName || !form.travelDate) return alert("Name and Travel Date are required.");
+    
+    setIsSubmitting(true);
+    try {
+      const payload: Omit<Booking, "id"> = { // Using the Booking type we made earlier
+        packageId: pkg.id,
+        packageTitle: pkg.title || pkg.destination,
+        userName: form.userName,
+        userEmail: form.userEmail,
+        userPhone: form.userPhone,
+        travelDate: form.travelDate,
+        returnDate: form.returnDate,
+        adults: Number(form.adults),
+        children: Number(form.children),
+        totalPrice: estimatedTotal,
+        currency: pkg.price?.currency || "INR",
+        status: "pending",
+        notes: form.notes,
+        createdAt: new Date().toISOString()
+      };
+
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      const result = await res.json();
+      if (result.success) {
+        alert("Booking created successfully!");
+        onClose();
+      } else {
+        alert("Failed to create booking.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Network error while booking.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const upd = (k: keyof typeof form, v: any) => setForm(p => ({ ...p, [k]: v }));
+
+  return (
+    <Modal open={true} onClose={onClose} title="Create Booking">
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 flex items-start gap-4 mb-2">
+          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-900"><Ic.Package /></div>
+          <div>
+            <p className="font-bold text-gray-900">{pkg.title || pkg.destination}</p>
+            <p className="text-sm text-gray-500 mt-1">{pkg.tripDuration} · Base Price: <strong className="text-blue-900">{getCurrSym(pkg.price?.currency)}{basePrice.toLocaleString("en-IN")}</strong></p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2 sm:col-span-1"><FL required>Guest Name</FL><Inp required value={form.userName} onChange={e => upd("userName", e.target.value)} placeholder="John Doe" /></div>
+          <div className="col-span-2 sm:col-span-1"><FL>Guest Email</FL><Inp type="email" value={form.userEmail} onChange={e => upd("userEmail", e.target.value)} placeholder="john@example.com" /></div>
+          <div className="col-span-2 sm:col-span-1"><FL>Guest Phone</FL><Inp type="tel" value={form.userPhone} onChange={e => upd("userPhone", e.target.value)} placeholder="+1 234 567 8900" /></div>
+          
+          <div className="col-span-2 sm:col-span-1"><FL required>Travel Date</FL><Inp required type="date" value={form.travelDate} onChange={e => upd("travelDate", e.target.value)} /></div>
+          <div className="col-span-2 sm:col-span-1"><FL>Return Date</FL><Inp type="date" value={form.returnDate} onChange={e => upd("returnDate", e.target.value)} /></div>
+
+          <div className="col-span-2 sm:col-span-1"><FL required>Adults</FL><Inp required type="number" min="1" value={form.adults} onChange={e => upd("adults", e.target.value)} /></div>
+          <div className="col-span-2 sm:col-span-1"><FL>Children (under 12)</FL><Inp type="number" min="0" value={form.children} onChange={e => upd("children", e.target.value)} /></div>
+          
+          <div className="col-span-2"><FL>Special Requests / Notes</FL><TA value={form.notes} onChange={e => upd("notes", e.target.value)} placeholder="Dietary requirements, occasion, etc." /></div>
+        </div>
+
+        <div className="flex items-center justify-between pt-6 border-t border-gray-100 mt-6">
+          <div className="text-left">
+            <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">Estimated Total Price</p>
+            <p className="text-xl font-bold text-blue-900">{getCurrSym(pkg.price?.currency)}{estimatedTotal.toLocaleString("en-IN")}</p>
+          </div>
+          <div className="flex gap-3">
+            <Btn type="button" variant="outline" onClick={onClose}>Cancel</Btn>
+            <Btn type="submit" variant="primary" disabled={isSubmitting}>{isSubmitting ? "Saving..." : "Create Booking"}</Btn>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
 
 // ─── DASHBOARD ────────────────────────────────────────────────────
 const Dashboard = ({ setPage }) => {
@@ -2271,10 +2740,10 @@ const Dashboard = ({ setPage }) => {
               <Btn variant="ghost" size="sm" onClick={() => setPage("packages")}>View all →</Btn>
             </div>
             <div className="space-y-3">
-              {packages.slice(0, 4).map(pkg => {
+              {packages.slice(0, 4).map((pkg, index) => {
                 const linked = pkg.itinerary.reduce((s, d) => s + d.activities.filter(a => a.activityRef).length + d.hotelStays.filter(h => h.hotelRef).length, 0);
                 return (
-                  <div key={pkg.id} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                  <div key={`${pkg.id}-${index}`} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-900"><Ic.Globe /></div>
                       <div>
@@ -2314,11 +2783,252 @@ const Dashboard = ({ setPage }) => {
   );
 };
 
+// ─── BOOKINGS PAGE ────────────────────────────────────────────────
+const STATUS_COLORS = {
+  pending: "bg-amber-50 text-amber-800 border-amber-200",
+  confirmed: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  cancelled: "bg-red-50 text-red-800 border-red-200",
+};
+
+const BookingsPage = () => {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selected, setSelected] = useState<Booking | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/bookings");
+      const data = await res.json();
+      if (data.success) setBookings(data.data);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { fetchBookings(); }, []);
+
+  const handleStatusChange = async (booking: Booking, newStatus: string) => {
+    try {
+      const res = await fetch("/api/bookings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...booking, status: newStatus }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: newStatus as Booking["status"] } : b));
+        if (selected?.id === booking.id) setSelected(b => b ? { ...b, status: newStatus as Booking["status"] } : b);
+      } else { alert("Status update failed."); }
+    } catch (e) { alert("Network error."); }
+  };
+
+  const handleDelete = async (booking: Booking) => {
+    if (!confirm(`Delete booking for "${booking.userName}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/bookings?id=${booking.id}`, { method: "DELETE" });
+      const result = await res.json();
+      if (result.success) {
+        setBookings(prev => prev.filter(b => b.id !== booking.id));
+        if (selected?.id === booking.id) setDetailOpen(false);
+      } else { 
+        alert("Delete failed: " + (result.message || "Unknown error")); 
+      }
+    } catch (e) { 
+      alert("Network error. Delete failed."); 
+    }
+  };
+
+  const filtered = bookings.filter(b => {
+    const matchSearch = !search || [b.userName, b.userEmail, b.packageTitle].some(f => f?.toLowerCase().includes(search.toLowerCase()));
+    const matchStatus = statusFilter === "all" || b.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const stats = {
+    total: bookings.length,
+    confirmed: bookings.filter(b => b.status === "confirmed").length,
+    pending: bookings.filter(b => b.status === "pending").length,
+    cancelled: bookings.filter(b => b.status === "cancelled").length,
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: "Total Bookings", value: stats.total, color: "text-blue-900", bg: "bg-blue-50" },
+          { label: "Confirmed", value: stats.confirmed, color: "text-emerald-700", bg: "bg-emerald-50" },
+          { label: "Pending", value: stats.pending, color: "text-amber-700", bg: "bg-amber-50" },
+          { label: "Cancelled", value: stats.cancelled, color: "text-red-700", bg: "bg-red-50" },
+        ].map(s => (
+          <Card key={s.label} className="p-4 flex items-center gap-4">
+            <div className={cls("w-10 h-10 rounded-xl flex items-center justify-center text-xl font-bold", s.bg, s.color)}>{s.value}</div>
+            <p className="text-sm font-semibold text-gray-600">{s.label}</p>
+          </Card>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <Card className="px-4 py-3 flex items-center gap-3">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Ic.Search /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email, package…" className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900" />
+        </div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-900/20 focus:border-blue-900">
+          <option value="all">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <Btn variant="outline" size="sm" onClick={fetchBookings}>Refresh</Btn>
+      </Card>
+
+      {/* Table */}
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                {["Guest", "Package", "Travel Date", "Guests", "Total", "Status", "Actions"].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {loading && (
+                <tr><td colSpan={7} className="text-center py-16 text-gray-400">Loading bookings…</td></tr>
+              )}
+              {!loading && filtered.length === 0 && (
+                <tr><td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
+                  {bookings.length === 0 ? "No bookings yet. They will appear here when guests book packages." : "No bookings match your search."}
+                </td></tr>
+              )}
+              {!loading && filtered.map((booking, idx) => (
+                <tr key={`${booking.id}-${idx}`} className="hover:bg-blue-50/20 transition-colors">
+                  <td className="px-4 py-3.5">
+                    <p className="font-bold text-gray-900">{booking.userName}</p>
+                    <p className="text-xs text-gray-400">{booking.userEmail}</p>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <p className="font-semibold text-gray-800 max-w-[180px] truncate">{booking.packageTitle || "—"}</p>
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <p className="text-gray-700">{booking.travelDate || "—"}</p>
+                    {booking.returnDate && <p className="text-xs text-gray-400">→ {booking.returnDate}</p>}
+                  </td>
+                  <td className="px-4 py-3.5 text-center">
+                    <span className="text-gray-700 font-semibold">{(booking.adults || 0) + (booking.children || 0)}</span>
+                    <p className="text-xs text-gray-400">{booking.adults}A {booking.children ? `${booking.children}C` : ""}</p>
+                  </td>
+                  <td className="px-4 py-3.5 whitespace-nowrap">
+                    <p className="font-bold text-blue-900">{getCurrSym(booking.currency)}{Number(booking.totalPrice || 0).toLocaleString("en-IN")}</p>
+                    <p className="text-xs text-gray-400">{booking.currency}</p>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <select
+                      value={booking.status}
+                      onChange={e => handleStatusChange(booking, e.target.value)}
+                      className={cls("text-xs font-semibold rounded-full px-2.5 py-1 border cursor-pointer focus:outline-none", STATUS_COLORS[booking.status] || "bg-gray-50 text-gray-600 border-gray-200")}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => { setSelected(booking); setDetailOpen(true); }} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-blue-50 text-blue-700 transition-colors" title="View Details">
+                        <Ic.Eye />
+                      </button>
+                      <button onClick={() => handleDelete(booking)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-500 transition-colors" title="Delete Booking">
+                        <Ic.Trash />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Booking Detail Modal */}
+      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title="Booking Details" wide>
+        {selected && (
+          <div className="p-6 space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Guest Name</p>
+                <p className="text-sm font-semibold text-gray-900">{selected.userName}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Email</p>
+                <p className="text-sm text-gray-700">{selected.userEmail || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Phone</p>
+                <p className="text-sm text-gray-700">{selected.userPhone || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Package</p>
+                <p className="text-sm font-semibold text-blue-900">{selected.packageTitle || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Travel Date</p>
+                <p className="text-sm text-gray-700">{selected.travelDate || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Return Date</p>
+                <p className="text-sm text-gray-700">{selected.returnDate || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Adults / Children</p>
+                <p className="text-sm text-gray-700">{selected.adults} Adults · {selected.children || 0} Children</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Price</p>
+                <p className="text-sm font-bold text-blue-900">{getCurrSym(selected.currency)}{Number(selected.totalPrice || 0).toLocaleString("en-IN")} {selected.currency}</p>
+              </div>
+            </div>
+            {selected.notes && (
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Notes</p>
+                <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{selected.notes}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Update Status</p>
+              <div className="flex gap-2">
+                {(["pending", "confirmed", "cancelled"] as const).map(s => (
+                  <Btn key={s} size="sm"
+                    variant={selected.status === s ? "primary" : "outline"}
+                    onClick={() => handleStatusChange(selected, s)}
+                    className="capitalize"
+                  >{s}</Btn>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-gray-100">
+              <Btn variant="danger" size="sm" onClick={() => handleDelete(selected)}>Delete Booking</Btn>
+              <Btn variant="ghost" size="sm" onClick={() => setDetailOpen(false)}>Close</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+};
+
 // ─── SIDEBAR ──────────────────────────────────────────────────────
 const Sidebar = ({ page, setPage, counts }) => {
   const nav = [
     { key: "dashboard", label: "Dashboard", icon: <Ic.Dashboard />, group: "main" },
     { key: "packages", label: "Travel Packages", icon: <Ic.Package />, group: "main", badge: counts.packages },
+    { key: "bookings", label: "Bookings", icon: <Ic.Booking />, group: "main", badge: counts.bookings },
+    { key: "coupons", label: "Coupons", icon: <Ic.Tag />, group: "main", badge: counts.coupons },
     { key: "master-activities", label: "Activities", icon: <Ic.Activity />, group: "master", badge: counts.activities },
     { key: "master-hotels", label: "Hotels", icon: <Ic.Hotel />, group: "master", badge: counts.hotels },
   ];
@@ -2398,7 +3108,8 @@ export default function App() {
   notToMiss: [],
 });
   const [page, setPage] = useState("dashboard");
-  const [packages, setPackages] = useState(INIT_PACKAGES);
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [masterActivities, setMasterActivities] = useState(INIT_ACTIVITIES);
   const [masterHotels, setMasterHotels] = useState(INIT_HOTELS);
   const [selectedId, setSelectedId] = useState(null);
@@ -2420,7 +3131,7 @@ export default function App() {
   }, []);
   const selectedPkg = packages.find(p => p.id === selectedId);
 
-  const store = { packages, setPackages, masterActivities, setMasterActivities, masterHotels, setMasterHotels };
+  const store = { packages, setPackages, masterActivities, setMasterActivities, masterHotels, setMasterHotels, coupons, setCoupons };
 
   const PAGE_META = {
     dashboard: { title: "Dashboard", subtitle: "Aventara Elite — Travel Management" },
@@ -2430,6 +3141,8 @@ export default function App() {
     view: { title: "Package Details", subtitle: selectedPkg ? `${selectedPkg.destination} · ${selectedPkg.tripDuration}` : "" },
     "master-activities": { title: "Master Activities", subtitle: `${masterActivities.length} reusable activities in global catalog` },
     "master-hotels": { title: "Master Hotels", subtitle: `${masterHotels.length} hotels in global catalog` },
+    "coupons": { title: "Coupons", subtitle: `${coupons.length} discount coupon${coupons.length !== 1 ? "s" : ""}` },
+    "bookings": { title: "Bookings", subtitle: "View and manage all guest bookings" },
   };
   const meta = PAGE_META[page] || PAGE_META.dashboard;
 
@@ -2535,17 +3248,20 @@ export default function App() {
       alert("Package updated ✅");
       fetchPackages();
       setPage("packages");
+    } else {
+      alert("Update failed: " + (result.message || "Unknown error"));
     }
 
   } catch (err) {
     console.error(err);
+    alert("Update failed due to a network or server error.");
   }
 };
 
   return (
     <StoreContext.Provider value={store}>
       <div className="min-h-screen bg-gray-50/80">
-        <Sidebar page={page} setPage={setPage} counts={{ packages: packages.length, activities: masterActivities.length, hotels: masterHotels.length }} />
+        <Sidebar page={page} setPage={setPage} counts={{ packages: packages.length, activities: masterActivities.length, hotels: masterHotels.length, coupons: coupons.length, bookings: 0 }} />
         <Topbar title={meta.title} subtitle={meta.subtitle} />
         <main className="ml-60 pt-16 min-h-screen">
           <div className="p-6 max-w-[1400px]">
@@ -2559,6 +3275,8 @@ export default function App() {
             {page === "view" && selectedPkg && <ViewPackage pkg={selectedPkg} onEdit={() => setPage("edit")} />}
             {page === "master-activities" && <MasterActivitiesPage />}
             {page === "master-hotels" && <MasterHotelsPage />}
+            {page === "coupons" && <CouponsPage />}
+            {page === "bookings" && <BookingsPage />}
           </div>
         </main>
       </div>

@@ -6,7 +6,8 @@ import { randomUUID } from "crypto";
 //  CREATE PACKAGE
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+    const { id, _id, ...body } = bodyRaw; // Remove client-generated IDs
 
     console.log(body)
 
@@ -60,14 +61,16 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export const dynamic = "force-dynamic";
+
 //  GET ALL PACKAGES
 export async function GET() {
   try {
     const db = await getDatabase();
 
     const packagesCollection = db.collection("packages");
-    const hotelsCollection = db.collection("Hotels");
-    const activitiesCollection = db.collection("Activities");
+    const hotelsCollection = db.collection("hotels");
+    const activitiesCollection = db.collection("activity");
 
     const packages = await packagesCollection.find({}).toArray();
 
@@ -95,15 +98,22 @@ export async function GET() {
 
    // IMPORTANT NORMALIZATION
 const normalizedPackages = packages.map((pkg) => {
-  const { _id, ...rest } = pkg;
+  const { _id, id, ...rest } = pkg;
 
   return {
-    id: _id.toString(), // Convert Mongo _id to string
     ...rest,
+    id: _id.toString(), // Convert Mongo _id to string
 
     itinerary: (rest.itinerary || []).map((day: any) => ({
       ...day,
       id: day.id || randomUUID(),
+
+      // Ensure mealsIncluded is always an array (may come back as string or undefined from DB)
+      mealsIncluded: Array.isArray(day.mealsIncluded)
+        ? day.mealsIncluded
+        : typeof day.mealsIncluded === "string" && day.mealsIncluded
+        ? day.mealsIncluded.split(",").map((s: string) => s.trim()).filter(Boolean)
+        : [],
 
       hotelStays: (day.hotelStays || []).map((h: any) => ({
         ...h,
@@ -125,7 +135,12 @@ const normalizedPackages = packages.map((pkg) => {
 
     return NextResponse.json(
       { success: true, data: normalizedPackages },
-      { status: 200 }
+      { 
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        }
+      }
     );
 
   } catch (err) {
@@ -142,11 +157,12 @@ const normalizedPackages = packages.map((pkg) => {
 // UPDATE PACKAGE
 export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
+    const bodyRaw = await req.json();
+    const { id, _id, ...body } = bodyRaw; // Extract unwanted fields
 
-    if (!body.id) {
+    if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json(
-        { message: "Package id is required", success: false },
+        { message: "Valid Package id is required", success: false },
         { status: 400 }
       );
     }
@@ -170,7 +186,7 @@ export async function PUT(req: NextRequest) {
     }));
 
     await collection.updateOne(
-      { _id: new ObjectId(body.id) },
+      { _id: new ObjectId(id) },
       {
         $set: {
           ...body,
@@ -201,9 +217,9 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
 
-    if (!id) {
+    if (!id || !ObjectId.isValid(id)) {
       return NextResponse.json(
-        { message: "Package id is required", success: false },
+        { message: "Valid Package id is required", success: false },
         { status: 400 }
       );
     }
@@ -211,9 +227,16 @@ export async function DELETE(req: NextRequest) {
     const db = await getDatabase();
     const collection = db.collection("packages");
 
-    await collection.deleteOne({
+    const result = await collection.deleteOne({
       _id: new ObjectId(id),
     });
+
+    if (result.deletedCount === 0) {
+      return NextResponse.json(
+        { message: "Package not found in database", success: false },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json(
       { message: "Package deleted successfully", success: true },

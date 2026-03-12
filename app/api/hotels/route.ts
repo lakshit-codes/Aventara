@@ -8,11 +8,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const db = await getDatabase();
 
-    
-    console.log("BODY:", body);
+    const { _id, id, ...insertData } = body;
 
-    const result = await db.collection("Hotels").insertOne({
-      ...body,
+    const result = await db.collection("hotels").insertOne({
+      ...insertData,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -33,17 +32,23 @@ export async function POST(req: NextRequest) {
 
 // GET ALL HOTELS
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const db = await getDatabase();
-    const hotels = await db.collection("Hotels").find().toArray();
+    const hotels = await db.collection("hotels").find().toArray();
 
     const normalized = hotels.map(h => ({
       ...h,
       _id: h._id.toString(),   // 👈 IMPORTANT CHANGE
     }));
 
-    return NextResponse.json({ success: true, data: normalized });
+    return NextResponse.json({ success: true, data: normalized }, {
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+    });
 
   } catch (err) {
     console.error(err);
@@ -74,11 +79,14 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const db = await getDatabase();
 
-    await db.collection("Hotels").updateOne(
-      { _id: new ObjectId(body.id) },
+    const { _id, ...updateData } = body;
+    const queryId = /^[0-9a-fA-F]{24}$/.test(_id) ? new ObjectId(_id) : _id;
+
+    await db.collection("hotels").updateOne(
+      { _id: queryId as any },
       {
         $set: {
-          ...body,
+          ...updateData,
           updatedAt: new Date(),
         },
       }
@@ -96,14 +104,25 @@ export async function PUT(req: NextRequest) {
 // DELETE HOTEL
 export async function DELETE(req: NextRequest) {
   try {
-    const body = await req.json();
-    const db = await getDatabase();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
 
-    await db.collection("Hotels").deleteOne({
-      _id: new ObjectId(body.id),
+    if (!id) {
+      return NextResponse.json({ success: false, message: "Missing id" }, { status: 400 });
+    }
+
+    const db = await getDatabase();
+    const queryId = /^[0-9a-fA-F]{24}$/.test(id) ? new ObjectId(id) : id;
+
+    const result = await db.collection("hotels").deleteOne({
+      _id: queryId as any,
     });
 
-    return NextResponse.json({ success: true });
+    if (result.deletedCount === 0) {
+      return NextResponse.json({ success: false, message: "Hotel not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: "Hotel deleted successfully" }, { status: 200 });
 
   } catch (err) {
     console.error("HOTEL DELETE ERROR:", err);
